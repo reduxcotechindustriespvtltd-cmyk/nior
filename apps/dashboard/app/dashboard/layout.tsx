@@ -14,9 +14,12 @@ import {
   Zap,
   Radio,
   Cpu,
+  Sun,
+  Moon,
 } from 'lucide-react'
 import { isAuthenticated, clearToken } from '@/lib/auth'
 import { useMe } from '@/lib/hooks'
+import { useTheme } from '@/lib/theme'
 
 const NAV = [
   { href: '/dashboard', label: 'Command', desc: 'System overview', icon: LayoutDashboard },
@@ -35,13 +38,14 @@ function LiveClock() {
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
   }, [])
-  return <span className="font-mono text-[11px] text-white/40 tabular-nums">{time}</span>
+  return <span className="font-mono text-[11px] text-theme-muted tabular-nums">{time}</span>
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const { data: me } = useMe()
+  const { theme, toggleTheme } = useTheme()
 
   useEffect(() => {
     if (!isAuthenticated()) router.replace('/auth/login')
@@ -57,7 +61,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   )?.label ?? 'Nior'
 
   return (
-    <div className="flex h-screen bg-[#030305] noise overflow-hidden">
+    <div className="flex h-screen overflow-hidden" style={{ background: 'var(--bg-base)' }}>
       {/* Background layers */}
       <div className="aurora-bg">
         <div className="aurora-orb aurora-orb-1" />
@@ -69,8 +73,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Sidebar */}
       <aside
-        className="relative z-20 w-[240px] shrink-0 flex flex-col border-r border-white/[0.06]"
-        style={{ background: 'var(--hud-bg)', backdropFilter: 'blur(48px)' }}
+        className="relative z-20 w-[240px] shrink-0 flex flex-col border-r border-theme"
+        style={{ background: 'var(--bg-sidebar)', backdropFilter: 'blur(48px)' }}
       >
         {/* Logo */}
         <div className="px-5 pt-6 pb-4 border-b border-white/[0.06]">
@@ -207,7 +211,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
 
           <div className="flex items-center gap-4 shrink-0">
-            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-lg border border-theme bg-theme-surface text-theme-muted hover:text-theme transition-colors"
+              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+            </button>
+            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-theme-surface border border-theme">
               <Cpu size={11} className="text-cyan-400/60" />
               <span className="system-readout text-white/30">LATENCY 12ms</span>
             </div>

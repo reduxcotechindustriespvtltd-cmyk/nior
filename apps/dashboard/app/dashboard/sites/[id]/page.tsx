@@ -12,6 +12,7 @@ import { formatDistanceToNow, format } from 'date-fns'
 import {
   useSite, useSiteEvents, useSiteSnippet, useKillSite, useRestoreSite, useDeleteSite,
 } from '@/lib/hooks'
+import { StatusBadge } from '@/components/hud/StatusBadge'
 
 type SiteMode = 'freeze' | 'overlay' | 'redirect' | 'ghost' | 'timebomb' | 'none'
 
@@ -22,6 +23,41 @@ const MODES: { id: SiteMode; label: string; icon: React.ElementType; description
   { id: 'ghost',    label: 'Ghost',    icon: Ghost,      description: 'Site loads but is read-only.', color: 'text-cyan-400' },
   { id: 'timebomb', label: 'Timebomb', icon: Bomb,       description: 'Automatically kill at a set time.', color: 'text-orange-400' },
 ]
+
+function DeleteConfirmModal({ name, onConfirm, onCancel, busy }: {
+  name: string; onConfirm: () => void; onCancel: () => void; busy: boolean
+}) {
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel} />
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0, y: 12 }} animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.95, opacity: 0, y: 12 }}
+        className="relative hud-card p-7 max-w-sm w-full z-10 border-red-500/20"
+      >
+        <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4 mx-auto bg-red-500/10 border border-red-500/20">
+          <Trash2 size={20} className="text-red-400" />
+        </div>
+        <h2 className="text-theme text-lg font-bold text-center mb-2">Remove this site?</h2>
+        <p className="text-theme-muted text-sm text-center mb-6 leading-relaxed">
+          <span className="text-theme font-semibold">{name}</span> and all event history will be permanently deleted. This cannot be undone.
+        </p>
+        <div className="flex gap-3">
+          <button onClick={onCancel}
+            className="flex-1 py-2.5 rounded-xl border border-theme text-theme-muted text-sm hover:bg-theme-surface transition-colors">
+            Cancel
+          </button>
+          <motion.button onClick={onConfirm} disabled={busy} whileTap={{ scale: 0.98 }}
+            className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-60">
+            {busy && <Loader2 size={14} className="animate-spin" />}
+            Yes, remove
+          </motion.button>
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
 
 function ConfirmModal({ isKilled, onConfirm, onCancel, busy }: {
   isKilled: boolean; onConfirm: () => void; onCancel: () => void; busy: boolean
@@ -34,22 +70,21 @@ function ConfirmModal({ isKilled, onConfirm, onCancel, busy }: {
         initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }}
         exit={{ scale: 0.9, opacity: 0, y: 20 }}
         transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-        className="relative glass rounded-2xl p-8 max-w-sm w-full z-10 border border-white/10"
-        style={{ background: 'rgba(10,10,10,0.97)' }}>
+        className="relative hud-card p-7 max-w-sm w-full z-10">
         <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-5 mx-auto ${
           isKilled ? 'bg-emerald-400/10 border border-emerald-400/20' : 'bg-red-500/10 border border-red-500/20'
         }`}>
           <Zap size={24} className={isKilled ? 'text-emerald-400' : 'text-red-400'} />
         </div>
-        <h2 className="text-white text-xl font-bold text-center mb-2">{isKilled ? 'Restore Site?' : 'Kill Site?'}</h2>
-        <p className="text-white/50 text-sm text-center mb-8">
+        <h2 className="text-theme text-xl font-bold text-center mb-2">{isKilled ? 'Restore Site?' : 'Kill Site?'}</h2>
+        <p className="text-theme-muted text-sm text-center mb-8">
           {isKilled
             ? 'The site will go live immediately for all visitors.'
             : 'Visitors will immediately see the configured kill mode. This is logged.'}
         </p>
         <div className="flex gap-3">
           <button onClick={onCancel}
-            className="flex-1 py-2.5 rounded-xl border border-white/10 text-white/60 text-sm hover:bg-white/5 transition-colors">
+            className="flex-1 py-2.5 rounded-xl border border-theme text-theme-muted text-sm hover:bg-theme-surface transition-colors">
             Cancel
           </button>
           <motion.button onClick={onConfirm} disabled={busy} whileTap={{ scale: 0.97 }}
@@ -196,11 +231,9 @@ function SnippetSection({ siteId }: { siteId: string }) {
   const cliFiles = CLI_FILES[fw]
 
   return (
-    <div className="glass rounded-2xl overflow-hidden">
-
-      {/* Header */}
-      <div className="px-5 py-4 border-b border-white/[0.05] flex items-center justify-between gap-3">
-        <h3 className="text-white font-semibold">Install</h3>
+    <div className="hud-card overflow-hidden">
+      <div className="px-5 py-3.5 border-b border-theme flex items-center justify-between gap-3">
+        <h3 className="text-theme font-semibold text-sm">Install</h3>
         <div className="flex gap-1">
           {(['cli', 'manual'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)}
@@ -384,6 +417,7 @@ export default function SiteDetailPage() {
   const [selectedMode, setSelectedMode] = useState<SiteMode | null>(null)
   const [modeConfig, setModeConfig] = useState<Record<string, any>>({})
   const [showConfirm, setShowConfirm] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   if (isLoading || !site) {
     return (
@@ -420,44 +454,50 @@ export default function SiteDetailPage() {
           style={{ background: 'radial-gradient(ellipse at center, rgba(255,45,85,0.07) 0%, transparent 70%)' }} />
       </div>
 
-      {/* Breadcrumb header */}
-      <div className="flex items-center gap-3 mb-8">
-        <button onClick={() => router.back()}
-          className="flex items-center gap-2 text-white/40 hover:text-white/80 transition-colors text-sm">
-          <ArrowLeft size={15} />
-          Sites
-        </button>
-        <span className="text-white/15">/</span>
-        <div className="flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${isKilled ? 'bg-red-500' : 'bg-emerald-400'}`}
-            style={{ boxShadow: isKilled ? '0 0 6px rgba(255,45,85,0.8)' : '0 0 6px rgba(52,211,153,0.8)' }} />
-          <span className="text-white font-semibold text-sm font-mono">{site.domain}</span>
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div className="flex items-center gap-3 min-w-0">
+          <button onClick={() => router.push('/dashboard/sites')}
+            className="flex items-center justify-center w-9 h-9 rounded-lg border border-theme bg-theme-surface text-theme-muted hover:text-theme transition-colors shrink-0">
+            <ArrowLeft size={16} />
+          </button>
+          <div className="min-w-0">
+            <p className="hud-label text-[9px] mb-0.5">Site node</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-theme font-semibold text-lg font-mono truncate">{site.domain}</h1>
+              <StatusBadge status={isKilled ? 'dead' : 'live'} />
+            </div>
+          </div>
         </div>
-        <div className={`ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono ${
-          isKilled
-            ? 'bg-red-500/10 text-red-400 border border-red-500/20'
-            : 'bg-emerald-400/10 text-emerald-400 border border-emerald-400/20'
-        }`}>
-          {isKilled ? 'KILLED' : 'LIVE'}
+
+        <div className="flex items-center gap-2 shrink-0 sm:ml-auto">
+          <a
+            href={`https://${site.domain}`}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-theme bg-theme-surface text-theme-muted hover:text-theme text-xs transition-colors"
+          >
+            <ExternalLink size={13} />
+            Open site
+          </a>
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-red-500/20 bg-red-500/[0.06] text-red-400/80 hover:text-red-400 hover:bg-red-500/10 text-xs transition-colors"
+            title="Remove site"
+          >
+            <Trash2 size={13} />
+            Remove
+          </button>
         </div>
-        <a href={`https://${site.domain}`} target="_blank" rel="noreferrer"
-          className="flex items-center gap-1 text-white/25 hover:text-white/60 transition-colors text-xs">
-          <ExternalLink size={12} />
-        </a>
-        <button onClick={() => deleteSite.mutate(siteId, { onSuccess: () => router.push('/dashboard/sites') })}
-          className="p-1.5 rounded-lg text-white/20 hover:text-red-400 transition-colors"
-          title="Delete site">
-          <Trash2 size={14} />
-        </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-8">
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
         {/* LEFT */}
         <div className="space-y-6">
 
           {/* Kill switch hero */}
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-            className="glass rounded-3xl p-10 flex flex-col items-center text-center relative overflow-hidden">
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+            className="hud-card p-8 sm:p-10 flex flex-col items-center text-center relative overflow-hidden">
             <div className="absolute inset-0 pointer-events-none"
               style={{
                 background: isKilled
@@ -466,7 +506,7 @@ export default function SiteDetailPage() {
                 transition: 'background 0.6s ease',
               }} />
 
-            <p className="text-white/30 text-xs uppercase tracking-widest mb-8 font-mono">Kill Switch</p>
+            <p className="text-theme-muted text-xs uppercase tracking-widest mb-6 font-mono">Kill Switch</p>
 
             {/* The button */}
             <div className="relative mb-8">
@@ -512,11 +552,11 @@ export default function SiteDetailPage() {
                 {isKilled ? 'Site is Killed' : 'Site is Live'}
               </span>
             </motion.div>
-            <p className="text-white/30 text-sm">
-              {isKilled ? `Mode: ${activeMode} — click to restore` : 'Click the switch to kill the site'}
+            <p className="text-theme-muted text-sm">
+              {isKilled ? `Mode: ${activeMode} — tap to restore` : 'Tap the switch to kill this site'}
             </p>
             {events.length > 0 && (
-              <p className="text-white/20 text-xs mt-4 flex items-center gap-1 font-mono">
+              <p className="text-theme-faint text-xs mt-3 flex items-center gap-1 font-mono">
                 <Clock size={11} />
                 Last action {formatDistanceToNow(new Date(events[0].activatedAt), { addSuffix: true })}
               </p>
@@ -524,34 +564,40 @@ export default function SiteDetailPage() {
           </motion.div>
 
           {/* Mode selector */}
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-            className="glass rounded-2xl p-6 space-y-5">
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}
+            className="hud-card p-5 sm:p-6 space-y-5">
             <div>
-              <h3 className="text-white font-semibold">Kill Mode</h3>
-              <p className="text-white/40 text-xs mt-0.5">What happens to visitors when the site is killed.</p>
+              <h3 className="text-theme font-semibold">Kill Mode</h3>
+              <p className="text-theme-muted text-xs mt-0.5">What visitors see when the site is killed.</p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               {MODES.map(m => {
                 const ModeIcon = m.icon
                 const isActive = activeMode === m.id
+                const isWide = m.id === 'timebomb'
                 return (
-                  <motion.button key={m.id} onClick={() => { setSelectedMode(m.id); setModeConfig({}) }}
-                    whileTap={{ scale: 0.98 }}
-                    className={`text-left flex items-start gap-3 p-3 rounded-xl border transition-all ${
+                  <motion.button
+                    key={m.id}
+                    onClick={() => { setSelectedMode(m.id); setModeConfig({}) }}
+                    whileTap={{ scale: 0.99 }}
+                    className={`relative text-left flex items-start gap-3 p-3.5 rounded-xl border transition-all ${
+                      isWide ? 'sm:col-span-2' : ''
+                    } ${
                       isActive
-                        ? 'border-red-500/30 bg-red-500/[0.06]'
-                        : 'border-white/[0.06] bg-white/[0.02] hover:border-white/[0.12] hover:bg-white/[0.04]'
-                    }`}>
-                    <div className={`mt-0.5 flex-shrink-0 ${isActive ? 'text-red-400' : m.color}`}>
+                        ? 'border-red-500/35 bg-red-500/[0.06]'
+                        : 'border-theme bg-theme-surface hover:border-red-500/15'
+                    }`}
+                  >
+                    <div className={`mt-0.5 shrink-0 ${isActive ? 'text-red-400' : m.color}`}>
                       <ModeIcon size={16} />
                     </div>
-                    <div className="flex-1">
-                      <p className={`text-sm font-semibold ${isActive ? 'text-white' : 'text-white/70'}`}>{m.label}</p>
-                      <p className="text-white/35 text-xs mt-0.5">{m.description}</p>
+                    <div className="flex-1 min-w-0 pr-6">
+                      <p className={`text-sm font-semibold ${isActive ? 'text-theme' : 'text-theme-secondary'}`}>{m.label}</p>
+                      <p className="text-theme-muted text-xs mt-0.5 leading-relaxed">{m.description}</p>
                     </div>
                     {isActive && (
-                      <div className="ml-auto w-4 h-4 rounded-full bg-red-500 flex items-center justify-center">
+                      <div className="absolute top-3 right-3 w-4 h-4 rounded-full bg-red-500 flex items-center justify-center">
                         <Check size={10} className="text-white" />
                       </div>
                     )}
@@ -560,9 +606,8 @@ export default function SiteDetailPage() {
               })}
             </div>
 
-            {/* Config */}
-            <div className="pt-2 border-t border-white/[0.05]">
-              <p className="text-white/40 text-xs uppercase tracking-widest mb-4 font-mono">Mode Configuration</p>
+            <div className="pt-4 border-t border-theme">
+              <p className="hud-label text-[9px] mb-3">Mode configuration</p>
               <AnimatePresence mode="wait">
                 <motion.div key={activeMode}
                   initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
@@ -583,37 +628,37 @@ export default function SiteDetailPage() {
           </motion.div>
 
           {/* Site info */}
-          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}
-            className="glass rounded-2xl p-5 space-y-3">
-            <h3 className="text-white font-semibold text-sm">Site Info</h3>
-            <div className="space-y-2.5">
+          <motion.div initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.12 }}
+            className="hud-card p-5">
+            <h3 className="text-theme font-semibold text-sm mb-4">Site Info</h3>
+            <dl className="grid grid-cols-[minmax(72px,auto)_1fr] gap-x-4 gap-y-3 text-xs">
               {[
                 { label: 'Name', value: site.name },
-                { label: 'Domain', value: site.domain },
-                { label: 'Token', value: site.siteToken, mono: true },
+                { label: 'Domain', value: site.domain, mono: true },
+                { label: 'Token', value: site.siteToken, mono: true, truncate: true },
                 { label: 'Events', value: String(eventsData?.total ?? site._count?.events ?? 0) },
                 { label: 'Created', value: format(new Date(site.createdAt), 'MMM d, yyyy') },
               ].map(row => (
-                <div key={row.label} className="flex items-center justify-between">
-                  <span className="text-white/35 text-xs">{row.label}</span>
-                  <span className={`text-white/75 text-xs ${row.mono ? 'font-mono bg-white/5 px-1.5 py-0.5 rounded text-[10px]' : ''}`}>
+                <div key={row.label} className="contents">
+                  <dt className="text-theme-muted">{row.label}</dt>
+                  <dd className={`text-theme-secondary text-right ${row.mono ? 'font-mono text-[10px] break-all' : ''} ${row.truncate ? 'truncate' : ''}`}>
                     {row.value}
-                  </span>
+                  </dd>
                 </div>
               ))}
-            </div>
+            </dl>
           </motion.div>
 
           {/* Event history */}
-          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.25 }}
-            className="glass rounded-2xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-white/[0.05] flex items-center justify-between">
-              <h3 className="text-white font-semibold text-sm">Event History</h3>
-              <span className="text-white/30 text-xs font-mono">{eventsData?.total ?? events.length} events</span>
+          <motion.div initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.16 }}
+            className="hud-card overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-theme flex items-center justify-between">
+              <h3 className="text-theme font-semibold text-sm">Event History</h3>
+              <span className="text-theme-faint text-xs font-mono">{eventsData?.total ?? events.length} events</span>
             </div>
-            <div className="max-h-[420px] overflow-y-auto">
+            <div className="max-h-[360px] overflow-y-auto">
               {events.length === 0 ? (
-                <p className="text-white/25 text-sm text-center py-10">No events yet.</p>
+                <p className="text-theme-faint text-sm text-center py-10">No events yet.</p>
               ) : (
                 events.map((event: any, i: number) => (
                   <motion.div key={event.id}
@@ -657,6 +702,18 @@ export default function SiteDetailPage() {
       <AnimatePresence>
         {showConfirm && (
           <ConfirmModal isKilled={isKilled} onConfirm={handleConfirm} onCancel={() => setShowConfirm(false)} busy={busy} />
+        )}
+        {showDeleteConfirm && (
+          <DeleteConfirmModal
+            name={site.name}
+            busy={deleteSite.isPending}
+            onCancel={() => setShowDeleteConfirm(false)}
+            onConfirm={() => {
+              deleteSite.mutate(siteId, {
+                onSuccess: () => router.push('/dashboard/sites'),
+              })
+            }}
+          />
         )}
       </AnimatePresence>
     </div>

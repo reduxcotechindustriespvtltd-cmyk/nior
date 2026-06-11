@@ -4,6 +4,7 @@ import './globals.css'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
 import { useState } from 'react'
+import { ThemeProvider } from '@/lib/theme'
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient({
@@ -11,18 +12,24 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   }))
 
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <title>Nior — Command Center</title>
         <meta name="description" content="Futuristic kill-switch command center for your web fleet" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('nior-theme');document.documentElement.setAttribute('data-theme',t==='light'?'light':'dark')}catch(e){}})()`,
+          }}
+        />
       </head>
       <body>
-        <QueryClientProvider client={queryClient}>
-          {children}
-          <Toaster
+        <ThemeProvider>
+          <QueryClientProvider client={queryClient}>
+            {children}
+            <Toaster
             position="bottom-right"
             toastOptions={{
               style: {
@@ -39,6 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             }}
           />
         </QueryClientProvider>
+        </ThemeProvider>
       </body>
     </html>
   )
