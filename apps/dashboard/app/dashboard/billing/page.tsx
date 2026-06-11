@@ -15,6 +15,7 @@ import {
 import { usePlans, useMe } from '@/lib/hooks'
 import { api } from '@/lib/auth'
 import toast from 'react-hot-toast'
+import { PageHeader } from '@/components/hud/PageHeader'
 
 const PLAN_ICONS: Record<string, React.ElementType> = {
   FREE: Zap,
@@ -83,21 +84,18 @@ export default function BillingPage() {
   return (
     <div className="space-y-8 max-w-6xl mx-auto">
 
-      {/* Header */}
-      <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }}>
-        <p className="text-[11px] font-mono text-white/25 uppercase tracking-widest mb-2">Billing</p>
-        <h1 className="text-4xl font-bold grad-text leading-none mb-3">Choose your plan</h1>
-        <p className="text-white/40 text-sm max-w-xl">
-          Scale your kill-switch coverage as you grow. Pay securely with UPI, cards, or net banking via PhonePe.
-        </p>
-      </motion.div>
+      <PageHeader
+        label="Access Control"
+        title="Power Tiers"
+        subtitle="Scale your kill-switch coverage as you grow. Pay securely with UPI, cards, or net banking via PhonePe."
+      />
 
       {/* Current plan */}
       {me && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="glass rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-white/[0.08]"
+          className="hud-card p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
         >
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
@@ -180,10 +178,8 @@ export default function BillingPage() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.05 }}
-                className={`relative rounded-2xl p-6 flex flex-col overflow-hidden transition-all ${
-                  isHighlighted
-                    ? 'border border-red-500/35 bg-gradient-to-b from-red-500/[0.08] to-transparent'
-                    : 'glass border border-white/[0.06]'
+                className={`relative rounded-2xl p-6 flex flex-col overflow-hidden transition-all hud-card ${
+                  isHighlighted ? 'border-red-500/35' : ''
                 }`}
                 style={isHighlighted ? { boxShadow: '0 0 48px rgba(255,45,85,0.1)' } : undefined}
               >
@@ -285,7 +281,7 @@ export default function BillingPage() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.3 }}
-        className="glass rounded-2xl p-5 border border-white/[0.06]"
+        className="hud-card p-5"
       >
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
           <div>

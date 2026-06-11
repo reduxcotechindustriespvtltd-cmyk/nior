@@ -3,9 +3,12 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter } from 'next/navigation'
-import { Globe, Plus, Power, Trash2, Search, Loader2, ChevronRight, Clock, Zap } from 'lucide-react'
+import { Globe, Plus, Power, Trash2, Search, Loader2, ChevronRight, Clock } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { useSites, useKillSite, useRestoreSite, useDeleteSite } from '@/lib/hooks'
+import { PageHeader } from '@/components/hud/PageHeader'
+import { NeonButton } from '@/components/hud/NeonButton'
+import { StatusBadge } from '@/components/hud/StatusBadge'
 
 function DeleteConfirm({ name, onConfirm, onCancel, loading }: {
   name: string
@@ -61,20 +64,17 @@ export default function SitesPage() {
   return (
     <div className="space-y-6">
 
-      {/* Header */}
-      <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }}
-        className="flex items-end justify-between">
-        <div>
-          <p className="text-[11px] font-mono text-white/25 uppercase tracking-widest mb-2">Specter Control</p>
-          <h1 className="text-4xl font-bold grad-text leading-none">Sites</h1>
-        </div>
-        <motion.button onClick={() => router.push('/dashboard/sites/new')}
-          whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white border border-white/10 bg-white/[0.05] hover:bg-white/[0.09] hover:border-white/20 transition-all">
-          <Plus size={14} />
-          New Site
-        </motion.button>
-      </motion.div>
+      <PageHeader
+        label="Fleet Control"
+        title="Site Nodes"
+        subtitle="Manage, search, and execute kill-switch operations across your entire deployment fleet."
+        action={
+          <NeonButton onClick={() => router.push('/dashboard/sites/new')}>
+            <Plus size={15} />
+            Deploy Site
+          </NeonButton>
+        }
+      />
 
       {/* Search */}
       <div className="relative">
@@ -88,16 +88,15 @@ export default function SitesPage() {
         />
       </div>
 
-      {/* Stats bar */}
-      <div className="flex items-center gap-6">
+      <div className="flex flex-wrap items-center gap-6 hud-card px-5 py-4">
         {[
-          { label: 'Total', value: sites.length, color: 'text-white/60' },
-          { label: 'Killed', value: sites.filter(s => s.isKilled).length, color: 'text-red-400' },
-          { label: 'Live', value: sites.filter(s => !s.isKilled).length, color: 'text-emerald-400' },
+          { label: 'Total nodes', value: sites.length, color: 'text-cyan-400' },
+          { label: 'Neutralized', value: sites.filter(s => s.isKilled).length, color: 'text-red-400' },
+          { label: 'Operational', value: sites.filter(s => !s.isKilled).length, color: 'text-emerald-400' },
         ].map(stat => (
-          <div key={stat.label} className="flex items-center gap-2">
-            <span className={`text-2xl font-bold font-mono ${stat.color}`}>{stat.value}</span>
-            <span className="text-white/25 text-xs uppercase tracking-widest">{stat.label}</span>
+          <div key={stat.label} className="flex items-center gap-3">
+            <span className={`text-3xl font-bold font-mono tracking-tighter ${stat.color}`}>{stat.value}</span>
+            <span className="hud-label text-[9px]">{stat.label}</span>
           </div>
         ))}
       </div>
@@ -128,7 +127,7 @@ export default function SitesPage() {
           )}
         </motion.div>
       ) : (
-        <div className="glass rounded-2xl overflow-hidden">
+        <div className="hud-card overflow-hidden">
           {/* Table head */}
           <div className="hidden sm:grid grid-cols-[1fr_160px_120px_100px_100px] gap-4 px-5 py-3 border-b border-white/[0.05] text-[11px] font-mono text-white/25 uppercase tracking-widest">
             <span>Site</span>
@@ -214,16 +213,8 @@ function SiteRow({ site, index, onView, onDelete }: {
         </span>
       </div>
 
-      {/* Status */}
       <div className="hidden sm:flex items-center">
-        <div className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-mono border ${
-          site.isKilled
-            ? 'bg-red-500/[0.08] text-red-400 border-red-500/20'
-            : 'bg-emerald-500/[0.08] text-emerald-400 border-emerald-500/20'
-        }`}>
-          <span className={`dot ${site.isKilled ? 'dot-dead' : 'dot-live'}`} />
-          {site.isKilled ? 'DEAD' : 'LIVE'}
-        </div>
+        <StatusBadge status={site.isKilled ? 'dead' : 'live'} />
       </div>
 
       {/* Actions */}
