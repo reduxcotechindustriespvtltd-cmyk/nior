@@ -1,0 +1,126 @@
+// Specter SaaS — Prisma Schema (MongoDB)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum Plan {
+  FREE
+  STARTER
+  PRO
+  AGENCY
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELED
+  UNPAID
+  INCOMPLETE
+  INCOMPLETE_EXPIRED
+  PAUSED
+}
+
+enum KillMode {
+  freeze
+  overlay
+  redirect
+  ghost
+  timebomb
+  none
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Models
+// ─────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id               String        @id @default(auto()) @map("_id") @db.ObjectId
+  email            String        @unique
+  passwordHash     String
+  name             String
+  createdAt        DateTime      @default(now())
+  stripeCustomerId String?
+
+  subscription     Subscription?
+  sites            Site[]
+  apiKeys          ApiKey[]
+
+  @@map("users")
+}
+
+model Subscription {
+  id                   String             @id @default(auto()) @map("_id") @db.ObjectId
+  userId               String             @unique @db.ObjectId
+  plan                 Plan               @default(FREE)
+  status               SubscriptionStatus @default(ACTIVE)
+  stripeSubscriptionId String?
+  currentPeriodEnd     DateTime?
+  sitesLimit           Int                @default(1)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  user                 User               @relation(fields: [userId], references: [id])
+
+  @@map("subscriptions")
+}
+
+model Site {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String    @db.ObjectId
+  name      String
+  domain    String
+  siteToken String    @unique
+  killState Json?
+  killMode  KillMode  @default(none)
+  isKilled  Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  user      User        @relation(fields: [userId], references: [id])
+  events    KillEvent[]
+
+  @@index([userId])
+  @@map("sites")
+}
+
+model ApiKey {
+  id         String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId     String    @db.ObjectId
+  name       String
+  prefix     String
+  keyHash    String    @unique
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  user       User      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("api_keys")
+}
+
+model KillEvent {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  siteId        String    @db.ObjectId
+  triggeredBy   String
+  mode          KillMode
+  config        Json?
+  activatedAt   DateTime  @default(now())
+  deactivatedAt DateTime?
+
+  site          Site      @relation(fields: [siteId], references: [id])
+
+  @@index([siteId])
+  @@map("kill_events")
+}

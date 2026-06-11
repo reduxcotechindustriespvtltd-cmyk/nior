@@ -1,0 +1,10 @@
+{
+  "/api/proxy/[...path]/route": "app/api/proxy/[...path]/route.js",
+  "/auth/login/page": "app/auth/login/page.js",
+  "/page": "app/page.js",
+  "/dashboard/page": "app/dashboard/page.js",
+  "/dashboard/billing/page": "app/dashboard/billing/page.js",
+  "/dashboard/settings/page": "app/dashboard/settings/page.js",
+  "/dashboard/sites/new/page": "app/dashboard/sites/new/page.js",
+  "/dashboard/sites/[id]/page": "app/dashboard/sites/[id]/page.js"
+}

@@ -1,0 +1,17 @@
+{
+  "name": "specter",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "sdk:build": "cd packages/sdk && npm run build",
+    "sdk:obfuscate": "cd packages/sdk && npm run obfuscate"
+  },
+  "devDependencies": {
+    "turbo": "^1.13.0",
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0"
+  }
+}

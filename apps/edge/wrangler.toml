@@ -1,0 +1,10 @@
+name = "specter-edge"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+[[kv_namespaces]]
+binding = "SPECTER_KV"
+id = "your-kv-id-here"
+
+[vars]
+ENVIRONMENT = "production"

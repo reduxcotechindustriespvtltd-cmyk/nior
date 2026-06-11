@@ -1,0 +1,292 @@
+#!/usr/bin/env node
+
+import fs   from 'node:fs'
+import path from 'node:path'
+import rl   from 'node:readline'
+import { execSync } from 'node:child_process'
+
+const cwd = process.cwd()
+
+// ── Your deployed API URL — update this before republishing ───────────────────
+const API_URL = 'https://api.noir.app'
+
+// ── Colour helpers ────────────────────────────────────────────────────────────
+
+const R = '\x1b[0m'
+const clr = k => s => `\x1b[${k}m${s}${R}`
+const bold = clr(1), dim = clr(2), cyan = clr(36), green = clr(32), yellow = clr(33), red = clr(31)
+
+function log(s)  { console.log(s) }
+function ok(s)   { log(`  ${green('+')} ${s}`) }
+function info(s) { log(`  ${cyan('→')} ${s}`) }
+function warn(s) { log(`  ${yellow('!')} ${s}`) }
+
+// ── Prompt ────────────────────────────────────────────────────────────────────
+
+function ask(question, def = '') {
+  const iface = rl.createInterface({ input: process.stdin, output: process.stdout })
+  const hint  = def ? dim(` (${def})`) : ''
+  return new Promise(resolve =>
+    iface.question(`  ${cyan('?')} ${question}${hint} ${dim('›')} `, ans => {
+      iface.close()
+      resolve(ans.trim() || def)
+    })
+  )
+}
+
+// ── Framework detection ───────────────────────────────────────────────────────
+
+function detectFramework() {
+  const pkgPath = path.join(cwd, 'package.json')
+  if (!fs.existsSync(pkgPath)) return 'html'
+  const pkg  = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
+  const deps = { ...pkg.dependencies, ...pkg.devDependencies }
+  if ('next'     in deps) return 'next'
+  if ('react'    in deps) return 'react'
+  if ('fastify'  in deps) return 'fastify'
+  if ('express'  in deps) return 'express'
+  return 'node'
+}
+
+function detectPM() {
+  if (fs.existsSync(path.join(cwd, 'pnpm-lock.yaml'))) return 'pnpm'
+  if (fs.existsSync(path.join(cwd, 'yarn.lock')))      return 'yarn'
+  return 'npm'
+}
+
+// ── File helpers ──────────────────────────────────────────────────────────────
+
+function write(rel, content) {
+  const abs = path.resolve(cwd, rel)
+  const exists = fs.existsSync(abs)
+  fs.mkdirSync(path.dirname(abs), { recursive: true })
+  fs.writeFileSync(abs, content, 'utf8')
+  ok(exists ? `${rel} (updated)` : rel)
+}
+
+function upsertEnv(file, key, value) {
+  const abs = path.resolve(cwd, file)
+  let src = fs.existsSync(abs) ? fs.readFileSync(abs, 'utf8') : ''
+  const re = new RegExp(`^${key}=.*$`, 'm')
+  if (re.test(src)) {
+    src = src.replace(re, `${key}=${value}`)
+  } else {
+    if (src && !src.endsWith('\n')) src += '\n'
+    src += `${key}=${value}\n`
+  }
+  fs.writeFileSync(abs, src)
+  ok(`${key} → ${file}`)
+}
+
+function addGitignore(entry) {
+  const abs = path.resolve(cwd, '.gitignore')
+  let src = fs.existsSync(abs) ? fs.readFileSync(abs, 'utf8') : ''
+  if (!src.split('\n').some(l => l.trim() === entry)) {
+    if (src && !src.endsWith('\n')) src += '\n'
+    fs.writeFileSync(abs, src + entry + '\n')
+    ok(`.gitignore ← ${entry}`)
+  }
+}
+
+// ── SW stub ───────────────────────────────────────────────────────────────────
+
+function swStub(apiUrl) {
+  return `importScripts('${apiUrl}/api/v1/sw.js');\n`
+}
+
+// ── Per-framework file generators ─────────────────────────────────────────────
+
+function nextMiddlewareContent(isTs) {
+  const t = isTs ? '!' : ''
+  const ext = isTs ? 'ts' : 'js'
+  return [
+    `import { withSpecter } from '@rcti/noir/next'`,
+    ``,
+    `export default withSpecter({`,
+    `  token: process.env.SPECTER_TOKEN${t},`,
+    `})`,
+    ``,
+    `export const config = {`,
+    `  matcher: ['/((?!_next|api|favicon).*)'],`,
+    `}`,
+    ``,
+  ].join('\n')
+}
+
+// Patch React main entry — add SpecterProvider wrapper around root render
+function patchReactEntry(rel, tokenVar) {
+  const apiVar = null
+  const abs = path.resolve(cwd, rel)
+  if (!fs.existsSync(abs)) return false
+
+  let src = fs.readFileSync(abs, 'utf8')
+  if (src.includes('SpecterProvider') || src.includes('@rcti/noir')) {
+    ok(`${rel} (already configured)`)
+    return true
+  }
+
+  // Add import after last import line
+  const lines = src.split('\n')
+  let lastImport = 0
+  for (let i = 0; i < lines.length; i++) {
+    if (/^import\s/.test(lines[i])) lastImport = i
+  }
+  lines.splice(lastImport + 1, 0, `import { SpecterProvider } from '@rcti/noir/react'`)
+  src = lines.join('\n')
+
+  // Find .render( and wrap its content using paren counting
+  const renderIdx = src.indexOf('.render(')
+  if (renderIdx !== -1) {
+    const openParen = renderIdx + '.render('.length
+    let depth = 1, i = openParen
+    while (i < src.length && depth > 0) {
+      const ch = src[i]
+      if (ch === '"' || ch === "'" || ch === '`') {
+        const q = ch; i++
+        while (i < src.length && src[i] !== q) { if (src[i] === '\\') i++; i++ }
+        i++; continue
+      }
+      if (ch === '(') depth++
+      else if (ch === ')') { if (--depth === 0) break }
+      i++
+    }
+    // i is at closing )
+    const inner = src.slice(openParen, i).trim().replace(/,$/, '')
+    const indented = inner.split('\n').join('\n    ')
+    const tokenExpr = `import.meta.env.${tokenVar}`
+    const wrapped   = `\n  <SpecterProvider token={${tokenExpr}}>\n    ${indented}\n  </SpecterProvider>\n`
+    src = src.slice(0, openParen) + wrapped + src.slice(i)
+  }
+
+  fs.writeFileSync(abs, src)
+  ok(`${rel} (wrapped root in SpecterProvider)`)
+  return true
+}
+
+// ── Install noir ─────────────────────────────────────────────────────────
+
+function installPkg() {
+  const pkgPath = path.join(cwd, 'package.json')
+  if (!fs.existsSync(pkgPath)) return
+
+  const pkg  = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
+  const deps = { ...pkg.dependencies, ...pkg.devDependencies }
+  if ('@rcti/noir' in deps) return
+
+  const pm  = detectPM()
+  const cmd = pm === 'npm' ? 'npm install @rcti/noir' : `${pm} add @rcti/noir`
+  process.stdout.write(`  ${cyan('→')} Installing @rcti/noir... `)
+  try {
+    execSync(cmd, { cwd, stdio: 'ignore' })
+    log(green('done'))
+  } catch {
+    log(yellow('skipped — run manually: npm install @rcti/noir'))
+  }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+async function init() {
+  log('')
+  log(`  ${bold('◆ Specter')}${dim('  remote kill-switch setup')}`)
+  log('')
+
+  const framework = detectFramework()
+  const labels = { next: 'Next.js', react: 'React', express: 'Express', fastify: 'Fastify', node: 'Node.js', html: 'Static HTML' }
+  log(dim(`  Detected: ${labels[framework] ?? framework}`))
+  log('')
+
+  const token = await ask('Site token')
+
+  if (!token) {
+    log(`\n  ${red('✗')} Token is required — find it at your dashboard → Sites.\n`)
+    process.exit(1)
+  }
+
+  const apiUrl = API_URL
+  const swName = 'sw.js'
+  const swPath = '/sw.js'
+  log('')
+
+  // Install package for non-HTML projects
+  if (framework !== 'html') installPkg()
+
+  // ── Next.js ──────────────────────────────────────────────────────────────────
+
+  if (framework === 'next') {
+    const isTs = fs.existsSync(path.join(cwd, 'tsconfig.json'))
+    const ext  = isTs ? 'ts' : 'js'
+
+    write(`middleware.${ext}`, nextMiddlewareContent(isTs))
+    write(`public/${swName}`, swStub(apiUrl))
+    upsertEnv('.env.local', 'SPECTER_TOKEN', token)
+    addGitignore('.env.local')
+  }
+
+  // ── React / Vite ─────────────────────────────────────────────────────────────
+
+  else if (framework === 'react') {
+    const isTs = fs.existsSync(path.join(cwd, 'tsconfig.json'))
+
+    write(`public/${swName}`, swStub(apiUrl))
+    upsertEnv('.env', 'VITE_SPECTER_TOKEN', token)
+    addGitignore('.env')
+
+    const exts = isTs ? ['tsx', 'ts', 'jsx', 'js'] : ['jsx', 'js', 'tsx', 'ts']
+    const candidates = exts.flatMap(e => [`src/main.${e}`, `src/index.${e}`])
+    let patched = false
+    for (const f of candidates) {
+      if (patchReactEntry(f, 'VITE_SPECTER_TOKEN')) {
+        patched = true; break
+      }
+    }
+    if (!patched) {
+      warn(`Couldn't find src/main.* — add this manually:`)
+      log(dim(`     import { SpecterProvider } from '@rcti/noir/react'`))
+      log(dim(`     // wrap your root: <SpecterProvider token={...} apiUrl={...}>`))
+    }
+  }
+
+  // ── Express / Fastify / Node ──────────────────────────────────────────────────
+
+  else if (['express', 'fastify', 'node'].includes(framework)) {
+    upsertEnv('.env', 'SPECTER_TOKEN', token)
+    addGitignore('.env')
+
+    log('')
+    log(dim('  Add this to your entry file (before your routes):'))
+    log('')
+    log(`  ${cyan("import { specterMiddleware } from '@rcti/noir/node'")}`)
+    if (framework === 'fastify') {
+      log(`  ${cyan("await app.register(require('@fastify/middie'))")}`)
+    }
+    log(`  ${cyan('app.use(specterMiddleware({ token: process.env.SPECTER_TOKEN }))')}`)
+  }
+
+  // ── Static HTML ───────────────────────────────────────────────────────────────
+
+  else {
+    log(dim('  No package.json found — here are the two files to add:'))
+    log('')
+    log(`  ${bold('File 1')} — save as ${cyan(swPath)} at your domain root:`)
+    log(dim(`    ${swStub(apiUrl).trim()}`))
+    log('')
+    log(`  ${bold('File 2')} — paste in ${cyan('<head>')} on any page:`)
+    log(dim(`    <script src="${apiUrl}/api/v1/js" data-token="${token}" data-sw-path="${swPath}" async></script>`))
+  }
+
+  log('')
+  log(`  ${green('◆ Done!')}${dim(' Your site is now connected to Specter.')}`)
+  log(dim(`    Kill switch is OFF — flip it from your dashboard whenever you need it.`))
+  log('')
+}
+
+// ── Entry ─────────────────────────────────────────────────────────────────────
+
+const cmd = process.argv[2] ?? 'init'
+if (cmd === 'init') {
+  init().catch(e => { console.error(e.message ?? e); process.exit(1) })
+} else {
+  console.error(`Unknown command: ${cmd}\nUsage: noir init`)
+  process.exit(1)
+}
