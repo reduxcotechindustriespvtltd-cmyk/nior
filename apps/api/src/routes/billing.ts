@@ -1,4 +1,5 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
+import { Readable } from "stream";
 import Stripe from "stripe";
 import { prisma } from "../index";
 import { authenticate } from "../middleware/auth";
@@ -252,14 +253,12 @@ export async function billingRoutes(app: FastifyInstance) {
         },
       },
     },
-    async (
-      request: FastifyRequest<{
-        Body: { planId: string; interval?: "monthly" | "annual" };
-      }>,
-      reply: FastifyReply
-    ) => {
+    async (request: FastifyRequest, reply: FastifyReply) => {
       const { userId, email } = request.jwtUser;
-      const { planId, interval = "monthly" } = request.body;
+      const { planId, interval = "monthly" } = request.body as {
+        planId: string;
+        interval?: "monthly" | "annual";
+      };
 
       // Resolve plan config
       const plan = PLANS.find((p) => p.id === planId);
@@ -358,9 +357,14 @@ export async function billingRoutes(app: FastifyInstance) {
   app.post(
     "/webhook",
     {
-      config: {
-        // Disable body parsing so we get the raw buffer for signature verification
-        rawBody: true,
+      preParsing: async (request, _reply, payload) => {
+        const chunks: Buffer[] = [];
+        for await (const chunk of payload) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+        const raw = Buffer.concat(chunks);
+        (request as unknown as { rawBody: Buffer }).rawBody = raw;
+        return Readable.from(raw);
       },
       schema: {
         description: "Stripe webhook receiver",
@@ -384,8 +388,9 @@ export async function billingRoutes(app: FastifyInstance) {
       let event: Stripe.Event;
 
       try {
-        // @ts-expect-error rawBody is populated by Fastify's addContentTypeParser when rawBody:true
-        const rawBody: Buffer = (request as any).rawBody ?? Buffer.from(JSON.stringify(request.body));
+        const rawBody: Buffer =
+          (request as unknown as { rawBody?: Buffer }).rawBody ??
+          Buffer.from(JSON.stringify(request.body));
         event = stripe.webhooks.constructEvent(
           rawBody,
           signature as string,

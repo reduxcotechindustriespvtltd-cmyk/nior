@@ -70,8 +70,9 @@ declare module "@fastify/jwt" {
   interface FastifyJWT {
     payload: {
       userId: string;
-      email: string;
-      plan: string;
+      email?: string;
+      plan?: string;
+      tokenType?: "refresh";
     };
     user: {
       userId: string;
