@@ -2,11 +2,9 @@ name = "nior"
 main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
-# Create in Cloudflare dashboard: Workers & Pages → KV → Create namespace
-# Then paste the namespace ID below.
 [[kv_namespaces]]
 binding = "SPECTER_KV"
-id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+id = "89f82c66d7e4445f8908aa416d578c9b"
 
 [vars]
 ENVIRONMENT = "production"
