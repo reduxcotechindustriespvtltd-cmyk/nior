@@ -47,6 +47,8 @@ export interface Plan {
   priceAnnual: number | null
   sitesLimit: number | null
   features: string[]
+  currency?: 'INR'
+  highlighted?: boolean
 }
 
 // ── Sites ─────────────────────────────────────────────────────────────────────

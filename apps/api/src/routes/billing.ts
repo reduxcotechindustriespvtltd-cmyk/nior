@@ -1,246 +1,68 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
-import { Readable } from "stream";
-import Stripe from "stripe";
 import { prisma } from "../index";
 import { authenticate } from "../middleware/auth";
+import {
+  PUBLIC_PLANS,
+  getPlan,
+  getPlanAmountPaisa,
+  getPeriodEnd,
+  PLAN_SITES_LIMIT,
+  type BillingInterval,
+  type PlanId,
+} from "../lib/plans";
+import {
+  createMerchantOrderId,
+  createPhonePePayment,
+  getPhonePeOrderStatus,
+} from "../services/phonepe";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Stripe client
-// ─────────────────────────────────────────────────────────────────────────────
-
-function getStripe(): Stripe {
-  const key = process.env.STRIPE_SECRET_KEY;
-  if (!key) throw new Error("STRIPE_SECRET_KEY is not set");
-  return new Stripe(key, { apiVersion: "2024-04-10" });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Plan catalogue
-// This is the single source of truth — keep in sync with your Stripe dashboard
-// ─────────────────────────────────────────────────────────────────────────────
-
-export const PLANS = [
-  {
-    id: "FREE",
-    name: "Free",
-    description: "Perfect for personal projects",
-    priceMonthly: 0,
-    priceAnnual: 0,
-    sitesLimit: 1,
-    features: [
-      "1 site",
-      "All kill modes",
-      "Event history (last 10)",
-      "Community support",
-    ],
-    stripePriceIdMonthly: null,
-    stripePriceIdAnnual: null,
-  },
-  {
-    id: "STARTER",
-    name: "Starter",
-    description: "For small teams and indie developers",
-    priceMonthly: 9,
-    priceAnnual: 90,
-    sitesLimit: 5,
-    features: [
-      "5 sites",
-      "All kill modes",
-      "Full event history",
-      "API key access",
-      "Email support",
-    ],
-    stripePriceIdMonthly: process.env.STRIPE_PRICE_STARTER_MONTHLY ?? null,
-    stripePriceIdAnnual: process.env.STRIPE_PRICE_STARTER_ANNUAL ?? null,
-  },
-  {
-    id: "PRO",
-    name: "Pro",
-    description: "For growing businesses",
-    priceMonthly: 29,
-    priceAnnual: 290,
-    sitesLimit: 20,
-    features: [
-      "20 sites",
-      "All kill modes",
-      "Full event history",
-      "API key access",
-      "Webhook notifications",
-      "Priority support",
-    ],
-    stripePriceIdMonthly: process.env.STRIPE_PRICE_PRO_MONTHLY ?? null,
-    stripePriceIdAnnual: process.env.STRIPE_PRICE_PRO_ANNUAL ?? null,
-  },
-  {
-    id: "AGENCY",
-    name: "Agency",
-    description: "For agencies managing client sites",
-    priceMonthly: 79,
-    priceAnnual: 790,
-    sitesLimit: 100,
-    features: [
-      "100 sites",
-      "All kill modes",
-      "Full event history",
-      "Unlimited API keys",
-      "Webhook notifications",
-      "White-label option",
-      "Priority support",
-    ],
-    stripePriceIdMonthly: process.env.STRIPE_PRICE_AGENCY_MONTHLY ?? null,
-    stripePriceIdAnnual: process.env.STRIPE_PRICE_AGENCY_ANNUAL ?? null,
-  },
-  {
-    id: "ENTERPRISE",
-    name: "Enterprise",
-    description: "Custom plans for large organisations",
-    priceMonthly: null,
-    priceAnnual: null,
-    sitesLimit: null,
-    features: [
-      "Unlimited sites",
-      "SSO / SAML",
-      "Custom SLAs",
-      "Dedicated support",
-      "On-premise option",
-    ],
-    stripePriceIdMonthly: null,
-    stripePriceIdAnnual: null,
-  },
-] as const;
-
-// Map plan id -> sites limit (mirrors DB default logic)
-const PLAN_SITES_LIMIT: Record<string, number> = {
-  FREE: 1,
-  STARTER: 5,
-  PRO: 20,
-  AGENCY: 100,
-  ENTERPRISE: 999999,
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Webhook event handlers
-// ─────────────────────────────────────────────────────────────────────────────
-
-async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
-  const userId = session.metadata?.userId;
-  const planId = session.metadata?.planId;
-  if (!userId || !planId) return;
-
-  const stripeSubscriptionId =
-    typeof session.subscription === "string"
-      ? session.subscription
-      : session.subscription?.id;
-
-  const stripe = getStripe();
-  let currentPeriodEnd: Date | undefined;
-  if (stripeSubscriptionId) {
-    const sub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
-    currentPeriodEnd = new Date(sub.current_period_end * 1000);
-  }
-
+async function activateSubscription(
+  userId: string,
+  planId: PlanId,
+  interval: BillingInterval
+) {
   await prisma.subscription.upsert({
     where: { userId },
     create: {
       userId,
-      plan: planId as any,
+      plan: planId,
       status: "ACTIVE",
-      stripeSubscriptionId: stripeSubscriptionId ?? null,
-      currentPeriodEnd: currentPeriodEnd ?? null,
+      currentPeriodEnd: getPeriodEnd(interval),
       sitesLimit: PLAN_SITES_LIMIT[planId] ?? 1,
     },
     update: {
-      plan: planId as any,
+      plan: planId,
       status: "ACTIVE",
-      stripeSubscriptionId: stripeSubscriptionId ?? undefined,
-      currentPeriodEnd: currentPeriodEnd ?? undefined,
+      currentPeriodEnd: getPeriodEnd(interval),
       sitesLimit: PLAN_SITES_LIMIT[planId] ?? 1,
     },
   });
-
-  // Keep stripeCustomerId in sync
-  if (session.customer) {
-    const customerId =
-      typeof session.customer === "string"
-        ? session.customer
-        : session.customer.id;
-    await prisma.user.update({
-      where: { id: userId },
-      data: { stripeCustomerId: customerId },
-    });
-  }
 }
-
-async function handleSubscriptionUpdated(sub: Stripe.Subscription) {
-  const existingSub = await prisma.subscription.findFirst({
-    where: { stripeSubscriptionId: sub.id },
-  });
-  if (!existingSub) return;
-
-  // Derive plan from price metadata if available
-  const priceId = sub.items.data[0]?.price.id;
-  const allPlans = PLANS.filter((p) => p.stripePriceIdMonthly || p.stripePriceIdAnnual);
-  const matched = allPlans.find(
-    (p) => p.stripePriceIdMonthly === priceId || p.stripePriceIdAnnual === priceId
-  );
-  const newPlan = (matched?.id as any) ?? existingSub.plan;
-
-  await prisma.subscription.update({
-    where: { id: existingSub.id },
-    data: {
-      plan: newPlan,
-      status: sub.status.toUpperCase().replace(/-/g, "_") as any,
-      currentPeriodEnd: new Date(sub.current_period_end * 1000),
-      sitesLimit: PLAN_SITES_LIMIT[newPlan] ?? existingSub.sitesLimit,
-    },
-  });
-}
-
-async function handleSubscriptionDeleted(sub: Stripe.Subscription) {
-  await prisma.subscription.updateMany({
-    where: { stripeSubscriptionId: sub.id },
-    data: {
-      plan: "FREE",
-      status: "CANCELED",
-      stripeSubscriptionId: null,
-      currentPeriodEnd: null,
-      sitesLimit: 1,
-    },
-  });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Route plugin
-// ─────────────────────────────────────────────────────────────────────────────
 
 export async function billingRoutes(app: FastifyInstance) {
-  // ── GET /billing/plans ────────────────────────────────────────────────────────
-  // Public — no auth required
+  // ── GET /billing/plans ──────────────────────────────────────────────────────
 
   app.get(
     "/plans",
     {
       schema: {
-        description: "Retrieve available subscription plans and pricing",
+        description: "Retrieve available subscription plans and pricing (INR)",
         tags: ["billing"],
       },
     },
     async (_request: FastifyRequest, reply: FastifyReply) => {
-      // Strip sensitive Stripe price IDs from the public response
-      const publicPlans = PLANS.map(({ stripePriceIdMonthly, stripePriceIdAnnual, ...rest }) => rest);
-      return reply.code(200).send({ plans: publicPlans });
+      return reply.code(200).send({ plans: PUBLIC_PLANS });
     }
   );
 
   // ── POST /billing/checkout ────────────────────────────────────────────────────
-  // Requires auth
 
   app.post(
     "/checkout",
     {
       preHandler: [authenticate],
       schema: {
-        description: "Create a Stripe Checkout session to upgrade the plan",
+        description: "Create a PhonePe checkout session to upgrade the plan",
         tags: ["billing"],
         security: [{ bearerAuth: [] }],
         body: {
@@ -254,14 +76,13 @@ export async function billingRoutes(app: FastifyInstance) {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const { userId, email } = request.jwtUser;
+      const { userId } = request.jwtUser;
       const { planId, interval = "monthly" } = request.body as {
         planId: string;
-        interval?: "monthly" | "annual";
+        interval?: BillingInterval;
       };
 
-      // Resolve plan config
-      const plan = PLANS.find((p) => p.id === planId);
+      const plan = getPlan(planId);
       if (!plan || planId === "FREE" || planId === "ENTERPRISE") {
         return reply.code(400).send({
           statusCode: 400,
@@ -270,60 +91,169 @@ export async function billingRoutes(app: FastifyInstance) {
         });
       }
 
-      const priceId =
-        interval === "annual" ? plan.stripePriceIdAnnual : plan.stripePriceIdMonthly;
-      if (!priceId) {
-        return reply.code(503).send({
-          statusCode: 503,
-          error: "Service Unavailable",
-          message: "Stripe price IDs are not configured for this plan.",
+      const amountPaisa = getPlanAmountPaisa(planId, interval);
+      if (!amountPaisa) {
+        return reply.code(400).send({
+          statusCode: 400,
+          error: "Bad Request",
+          message: "This plan cannot be purchased online.",
         });
       }
 
-      const stripe = getStripe();
-      const user = await prisma.user.findUnique({ where: { id: userId } });
-
-      // Reuse existing Stripe customer if present
-      let customerId = user?.stripeCustomerId ?? undefined;
-      if (!customerId) {
-        const customer = await stripe.customers.create({
-          email,
-          metadata: { userId },
-        });
-        customerId = customer.id;
-        await prisma.user.update({
-          where: { id: userId },
-          data: { stripeCustomerId: customerId },
-        });
-      }
-
+      const merchantOrderId = createMerchantOrderId(userId);
       const appUrl = process.env.APP_URL ?? "http://localhost:3000";
-      const session = await stripe.checkout.sessions.create({
-        customer: customerId,
-        payment_method_types: ["card"],
-        mode: "subscription",
-        line_items: [{ price: priceId, quantity: 1 }],
-        metadata: { userId, planId },
-        success_url: `${appUrl}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${appUrl}/billing/cancel`,
-        allow_promotion_codes: true,
-        subscription_data: {
-          metadata: { userId, planId },
+      const redirectUrl = `${appUrl}/dashboard/billing/success?orderId=${encodeURIComponent(merchantOrderId)}`;
+
+      await prisma.payment.create({
+        data: {
+          userId,
+          merchantOrderId,
+          planId: planId as PlanId,
+          interval,
+          amountPaisa,
+          status: "PENDING",
         },
       });
 
-      return reply.code(200).send({ url: session.url, sessionId: session.id });
+      try {
+        const session = await createPhonePePayment({
+          merchantOrderId,
+          amountPaisa,
+          redirectUrl,
+          metaInfo: {
+            udf1: userId,
+            udf2: planId,
+            udf3: interval,
+          },
+        });
+
+        await prisma.payment.update({
+          where: { merchantOrderId },
+          data: { phonePeOrderId: session.orderId },
+        });
+
+        return reply.code(200).send({
+          url: session.redirectUrl,
+          merchantOrderId,
+          orderId: session.orderId,
+        });
+      } catch (err: unknown) {
+        await prisma.payment.update({
+          where: { merchantOrderId },
+          data: { status: "FAILED" },
+        });
+        const message = err instanceof Error ? err.message : "Payment initiation failed";
+        app.log.error({ err }, "PhonePe checkout failed");
+        return reply.code(502).send({
+          statusCode: 502,
+          error: "Bad Gateway",
+          message,
+        });
+      }
     }
   );
 
-  // ── POST /billing/portal ──────────────────────────────────────────────────────
+  // ── POST /billing/verify ──────────────────────────────────────────────────────
 
   app.post(
-    "/portal",
+    "/verify",
     {
       preHandler: [authenticate],
       schema: {
-        description: "Create a Stripe Customer Portal session for subscription management",
+        description: "Verify PhonePe payment and activate subscription",
+        tags: ["billing"],
+        security: [{ bearerAuth: [] }],
+        body: {
+          type: "object",
+          required: ["merchantOrderId"],
+          properties: {
+            merchantOrderId: { type: "string" },
+            mock: { type: "boolean" },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { userId } = request.jwtUser;
+      const { merchantOrderId, mock } = request.body as {
+        merchantOrderId: string;
+        mock?: boolean;
+      };
+
+      const payment = await prisma.payment.findUnique({
+        where: { merchantOrderId },
+      });
+
+      if (!payment || payment.userId !== userId) {
+        return reply.code(404).send({
+          statusCode: 404,
+          error: "Not Found",
+          message: "Payment not found.",
+        });
+      }
+
+      if (payment.status === "COMPLETED") {
+        return reply.code(200).send({
+          status: "COMPLETED",
+          plan: payment.planId,
+          message: "Subscription already active.",
+        });
+      }
+
+      let orderState: string;
+
+      if (process.env.PHONEPE_MOCK === "true" || mock) {
+        orderState = "COMPLETED";
+      } else {
+        const status = await getPhonePeOrderStatus(merchantOrderId);
+        orderState = status.state;
+      }
+
+      if (orderState === "COMPLETED") {
+        await prisma.payment.update({
+          where: { merchantOrderId },
+          data: { status: "COMPLETED" },
+        });
+
+        await activateSubscription(
+          userId,
+          payment.planId as PlanId,
+          payment.interval as BillingInterval
+        );
+
+        return reply.code(200).send({
+          status: "COMPLETED",
+          plan: payment.planId,
+          message: "Payment successful. Your plan is now active.",
+        });
+      }
+
+      if (orderState === "FAILED") {
+        await prisma.payment.update({
+          where: { merchantOrderId },
+          data: { status: "FAILED" },
+        });
+        return reply.code(402).send({
+          status: "FAILED",
+          message: "Payment failed. Please try again.",
+        });
+      }
+
+      return reply.code(202).send({
+        status: orderState,
+        message: "Payment is still processing. Please wait a moment and refresh.",
+      });
+    }
+  );
+
+  // ── GET /billing/payments ─────────────────────────────────────────────────────
+
+  app.get(
+    "/payments",
+    {
+      preHandler: [authenticate],
+      schema: {
+        description: "List recent payments for the authenticated user",
         tags: ["billing"],
         security: [{ bearerAuth: [] }],
       },
@@ -331,118 +261,22 @@ export async function billingRoutes(app: FastifyInstance) {
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { userId } = request.jwtUser;
 
-      const user = await prisma.user.findUnique({ where: { id: userId } });
-      if (!user?.stripeCustomerId) {
-        return reply.code(400).send({
-          statusCode: 400,
-          error: "Bad Request",
-          message: "No Stripe customer record found. Please purchase a plan first.",
-        });
-      }
-
-      const stripe = getStripe();
-      const appUrl = process.env.APP_URL ?? "http://localhost:3000";
-      const portalSession = await stripe.billingPortal.sessions.create({
-        customer: user.stripeCustomerId,
-        return_url: `${appUrl}/billing`,
+      const payments = await prisma.payment.findMany({
+        where: { userId },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+        select: {
+          id: true,
+          merchantOrderId: true,
+          planId: true,
+          interval: true,
+          amountPaisa: true,
+          status: true,
+          createdAt: true,
+        },
       });
 
-      return reply.code(200).send({ url: portalSession.url });
-    }
-  );
-
-  // ── POST /billing/webhook ─────────────────────────────────────────────────────
-  // Public — verified via Stripe signature. Must receive raw body.
-
-  app.post(
-    "/webhook",
-    {
-      preParsing: async (request, _reply, payload) => {
-        const chunks: Buffer[] = [];
-        for await (const chunk of payload) {
-          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-        }
-        const raw = Buffer.concat(chunks);
-        (request as unknown as { rawBody: Buffer }).rawBody = raw;
-        return Readable.from(raw);
-      },
-      schema: {
-        description: "Stripe webhook receiver",
-        tags: ["billing"],
-        // No security — Stripe signs the request
-      },
-    },
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-      if (!webhookSecret) {
-        app.log.error("STRIPE_WEBHOOK_SECRET is not set");
-        return reply.code(500).send({ error: "Webhook secret not configured" });
-      }
-
-      const signature = request.headers["stripe-signature"];
-      if (!signature) {
-        return reply.code(400).send({ error: "Missing stripe-signature header" });
-      }
-
-      const stripe = getStripe();
-      let event: Stripe.Event;
-
-      try {
-        const rawBody: Buffer =
-          (request as unknown as { rawBody?: Buffer }).rawBody ??
-          Buffer.from(JSON.stringify(request.body));
-        event = stripe.webhooks.constructEvent(
-          rawBody,
-          signature as string,
-          webhookSecret
-        );
-      } catch (err: any) {
-        app.log.warn(`Stripe webhook signature verification failed: ${err.message}`);
-        return reply.code(400).send({ error: `Webhook error: ${err.message}` });
-      }
-
-      app.log.info({ eventType: event.type, eventId: event.id }, "Stripe webhook received");
-
-      try {
-        switch (event.type) {
-          case "checkout.session.completed":
-            await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session);
-            break;
-
-          case "customer.subscription.updated":
-            await handleSubscriptionUpdated(event.data.object as Stripe.Subscription);
-            break;
-
-          case "customer.subscription.deleted":
-            await handleSubscriptionDeleted(event.data.object as Stripe.Subscription);
-            break;
-
-          case "invoice.payment_failed": {
-            const invoice = event.data.object as Stripe.Invoice;
-            const subId =
-              typeof invoice.subscription === "string"
-                ? invoice.subscription
-                : invoice.subscription?.id;
-            if (subId) {
-              await prisma.subscription.updateMany({
-                where: { stripeSubscriptionId: subId },
-                data: { status: "PAST_DUE" },
-              });
-            }
-            break;
-          }
-
-          default:
-            app.log.debug(`Unhandled Stripe event type: ${event.type}`);
-        }
-      } catch (handlerErr: any) {
-        app.log.error({ err: handlerErr, eventType: event.type }, "Webhook handler error");
-        // Return 200 to prevent Stripe retries for application-level errors
-        // (retrying would not fix them). Return 500 only for transient DB failures.
-        return reply.code(200).send({ received: true, warning: "Handler error logged" });
-      }
-
-      return reply.code(200).send({ received: true });
+      return reply.code(200).send({ payments });
     }
   );
 }
