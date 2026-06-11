@@ -7,8 +7,10 @@
     "deploy": "wrangler deploy",
     "build": "tsc --noEmit"
   },
+  "dependencies": {
+    "wrangler": "^3.0.0"
+  },
   "devDependencies": {
-    "wrangler": "^3.0.0",
     "@cloudflare/workers-types": "^4.0.0",
     "typescript": "^5.4.0"
   }

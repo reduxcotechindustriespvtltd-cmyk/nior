@@ -1,10 +1,15 @@
-name = "specter-edge"
+name = "nior"
 main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
+# Create in Cloudflare dashboard: Workers & Pages → KV → Create namespace
+# Then paste the namespace ID below.
 [[kv_namespaces]]
 binding = "SPECTER_KV"
-id = "your-kv-id-here"
+id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
 
 [vars]
 ENVIRONMENT = "production"
+
+# Set SIGNING_SECRET in Cloudflare dashboard (Settings → Variables and Secrets)
+# Must match EDGE_INTERNAL_SECRET in apps/api/.env
