@@ -76,21 +76,6 @@ export const PLANS: PlanDefinition[] = [
       "Priority support",
     ],
   },
-  {
-    id: "ENTERPRISE",
-    name: "Enterprise",
-    description: "Custom plans for large organisations",
-    priceMonthlyInr: null,
-    priceAnnualInr: null,
-    sitesLimit: null,
-    features: [
-      "Unlimited sites",
-      "SSO / SAML",
-      "Custom SLAs",
-      "Dedicated support",
-      "On-premise option",
-    ],
-  },
 ];
 
 export const PLAN_SITES_LIMIT: Record<PlanId, number> = {

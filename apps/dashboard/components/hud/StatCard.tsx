@@ -40,14 +40,14 @@ export function StatCard({ icon: Icon, label, value, sub, accent = 'default', de
       <div className="relative z-10">
         <div className="flex items-start justify-between mb-4">
           <span className="hud-label text-[10px]">{label}</span>
-          <div className={`p-2 rounded-lg bg-white/[0.03] border border-white/[0.06] ${a.icon}`}>
+          <div className={`p-2 rounded-lg bg-theme-surface border border-theme ${a.icon}`}>
             <Icon size={15} strokeWidth={1.75} />
           </div>
         </div>
-        <p className="text-4xl sm:text-5xl font-bold text-white leading-none mb-2 font-mono tracking-tighter">
+        <p className="text-4xl sm:text-5xl font-bold text-theme leading-none mb-2 font-mono tracking-tighter">
           {value}
         </p>
-        <p className="text-xs text-white/30 font-mono">{sub}</p>
+        <p className="text-xs text-theme-muted font-mono">{sub}</p>
       </div>
     </motion.div>
   )

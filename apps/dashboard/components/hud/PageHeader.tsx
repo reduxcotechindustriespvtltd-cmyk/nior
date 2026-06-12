@@ -25,7 +25,7 @@ export function PageHeader({ label, title, subtitle, action }: PageHeaderProps) 
         </div>
         <h1 className="text-4xl sm:text-5xl font-bold hud-title tracking-tight">{title}</h1>
         {subtitle && (
-          <p className="text-white/35 text-sm mt-2 max-w-xl leading-relaxed">{subtitle}</p>
+          <p className="text-theme-muted text-sm mt-2 max-w-xl leading-relaxed">{subtitle}</p>
         )}
       </div>
       {action && <div className="shrink-0">{action}</div>}

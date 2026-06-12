@@ -276,33 +276,6 @@ export default function BillingPage() {
         </AnimatePresence>
       </div>
 
-      {/* Trust row */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.3 }}
-        className="hud-card p-5"
-      >
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
-          <div>
-            <p className="text-white/70 text-sm font-medium">Secure payments by PhonePe</p>
-            <p className="text-white/30 text-xs mt-1">
-              UPI · Cards · Net Banking · Instant activation after payment
-            </p>
-          </div>
-          <div className="flex flex-wrap justify-center gap-2">
-            {['UPI', 'Visa', 'Mastercard', 'Net Banking'].map(tag => (
-              <span
-                key={tag}
-                className="text-[10px] font-mono px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/[0.08] text-white/40"
-              >
-                {tag}
-              </span>
-            ))}
-          </div>
-        </div>
-      </motion.div>
-
       {/* Compare strip */}
       {paidPlans.length > 0 && (
         <p className="text-center text-white/20 text-xs font-mono pb-4">

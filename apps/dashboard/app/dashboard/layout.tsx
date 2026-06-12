@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { motion } from 'framer-motion'
 import {
   LayoutDashboard,
   Globe,
@@ -14,12 +13,9 @@ import {
   Zap,
   Radio,
   Cpu,
-  Sun,
-  Moon,
 } from 'lucide-react'
 import { isAuthenticated, clearToken } from '@/lib/auth'
 import { useMe } from '@/lib/hooks'
-import { useTheme } from '@/lib/theme'
 
 const NAV = [
   { href: '/dashboard', label: 'Command', desc: 'System overview', icon: LayoutDashboard },
@@ -45,7 +41,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter()
   const pathname = usePathname()
   const { data: me } = useMe()
-  const { theme, toggleTheme } = useTheme()
 
   useEffect(() => {
     if (!isAuthenticated()) router.replace('/auth/login')
@@ -77,7 +72,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         style={{ background: 'var(--bg-sidebar)', backdropFilter: 'blur(48px)' }}
       >
         {/* Logo */}
-        <div className="px-5 pt-6 pb-4 border-b border-white/[0.06]">
+        <div className="px-5 pt-6 pb-4 border-b border-theme">
           <div className="flex items-center gap-3">
             <div
               className="relative w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden"
@@ -92,7 +87,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
             <div>
               <span
-                className="text-white font-bold text-lg tracking-tight"
+                className="text-theme font-bold text-lg tracking-tight"
                 style={{ fontFamily: "'Space Grotesk', sans-serif" }}
               >
                 Nior
@@ -105,8 +100,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </div>
 
-        {/* System readout */}
-        <div className="px-5 py-3 border-b border-white/[0.04] hidden lg:block">
+        {/* System readout
+        <div className="px-5 py-3 border-b border-theme hidden lg:block">
           <div className="system-readout space-y-0.5">
             <div className="flex justify-between">
               <span>NODE</span>
@@ -114,22 +109,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
             <div className="flex justify-between">
               <span>PLAN</span>
-              <span className="text-white/50">{me?.plan ?? '—'}</span>
+              <span className="text-theme-muted">{me?.plan ?? '—'}</span>
             </div>
             <div className="flex justify-between">
               <span>LIMIT</span>
-              <span className="text-white/50">{me?.sitesLimit ?? '—'} sites</span>
+              <span className="text-theme-muted">{me?.sitesLimit ?? '—'} sites</span>
             </div>
           </div>
-        </div>
+        </div> */}
 
         {/* New site CTA */}
         <div className="px-3 py-3">
           <Link
             href="/dashboard/sites/new"
-            className="group flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl border border-dashed border-white/10 text-white/40 text-sm hover:border-red-500/30 hover:text-white/70 hover:bg-red-500/[0.04] transition-all"
+            className="group flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl border border-dashed border-theme text-theme-muted text-sm hover:border-red-500/30 hover:text-theme-secondary hover:bg-red-500/[0.04] transition-all"
           >
-            <div className="w-6 h-6 rounded-lg bg-white/[0.04] border border-white/[0.08] flex items-center justify-center group-hover:border-red-500/30 group-hover:bg-red-500/10 transition-all">
+            <div className="w-6 h-6 rounded-lg bg-theme-surface border border-theme flex items-center justify-center group-hover:border-red-500/30 group-hover:bg-red-500/10 transition-all">
               <Plus size={12} />
             </div>
             <span className="text-xs font-medium">Deploy new site</span>
@@ -146,28 +141,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 key={href}
                 href={href}
                 className={`relative flex items-center gap-3 px-3 py-3 rounded-xl transition-all group ${
-                  active ? 'nav-item-active text-white' : 'text-white/35 hover:text-white/70 hover:bg-white/[0.03]'
+                  active ? 'nav-item-active text-theme' : 'text-theme-muted hover:text-theme-secondary hover:bg-theme-surface'
                 }`}
               >
-                {active && (
-                  <motion.div
-                    layoutId="sidebar-glow"
-                    className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-8 rounded-full"
-                    style={{ background: 'linear-gradient(to bottom, #FF2D55, #22d3ee)' }}
-                  />
-                )}
                 <div
                   className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-all ${
                     active
                       ? 'bg-red-500/15 border border-red-500/25'
-                      : 'bg-white/[0.03] border border-white/[0.06] group-hover:border-white/10'
+                      : 'bg-theme-surface border border-theme group-hover:border-theme'
                   }`}
                 >
                   <Icon size={15} strokeWidth={active ? 2 : 1.5} />
                 </div>
                 <div className="min-w-0">
                   <p className="font-semibold text-[13px] leading-tight">{label}</p>
-                  <p className="text-[10px] text-white/25 font-mono truncate">{desc}</p>
+                  <p className="text-[10px] text-theme-faint font-mono truncate">{desc}</p>
                 </div>
               </Link>
             )
@@ -175,16 +163,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </nav>
 
         {/* User footer */}
-        <div className="px-3 pb-4 pt-2 border-t border-white/[0.05] space-y-2">
+        <div className="px-3 pb-4 pt-2 border-t border-theme space-y-2">
           {me && (
-            <div className="px-3 py-2.5 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-              <p className="text-white/80 text-xs font-medium truncate">{me.name}</p>
-              <p className="text-white/25 text-[10px] font-mono truncate">{me.email}</p>
+            <div className="px-3 py-2.5 rounded-xl bg-theme-surface border border-theme">
+              <p className="text-theme-secondary text-xs font-medium truncate">{me.name}</p>
+              <p className="text-theme-faint text-[10px] font-mono truncate">{me.email}</p>
             </div>
           )}
           <button
             onClick={logout}
-            className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-[13px] text-white/30 hover:text-white/60 hover:bg-white/[0.04] transition-all"
+            className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-[13px] text-theme-muted hover:text-theme-secondary hover:bg-theme-surface transition-all"
           >
             <LogOut size={13} />
             Disconnect
@@ -197,13 +185,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Top command bar */}
         <header className="command-bar shrink-0 px-6 py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="flex items-center gap-2 text-white/30">
+            <div className="flex items-center gap-2">
               <Radio size={12} className="text-red-400/70 animate-pulse" />
               <span className="hud-label text-[9px] hidden sm:inline">COMMAND INTERFACE</span>
             </div>
-            <span className="text-white/15 hidden sm:inline">/</span>
+            <span className="text-theme-faint hidden sm:inline">/</span>
             <span
-              className="text-white/70 text-sm font-semibold truncate"
+              className="text-theme-secondary text-sm font-semibold truncate"
               style={{ fontFamily: "'Space Grotesk', sans-serif" }}
             >
               {pageTitle}
@@ -211,16 +199,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
 
           <div className="flex items-center gap-4 shrink-0">
-            <button
-              onClick={toggleTheme}
-              className="p-2 rounded-lg border border-theme bg-theme-surface text-theme-muted hover:text-theme transition-colors"
-              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            >
-              {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
-            </button>
             <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-theme-surface border border-theme">
               <Cpu size={11} className="text-cyan-400/60" />
-              <span className="system-readout text-white/30">LATENCY 12ms</span>
+              <span className="system-readout">LATENCY 12ms</span>
             </div>
             <LiveClock />
             {me && (

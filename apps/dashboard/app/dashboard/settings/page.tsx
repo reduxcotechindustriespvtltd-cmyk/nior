@@ -1,12 +1,16 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
-import { User, Key, Shield, Loader2, Check, Copy, Trash2, Plus } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import {
+  User, Key, Shield, Loader2, Check, Copy, Trash2, Plus,
+  Eye, EyeOff, AlertTriangle, ChevronRight, Zap, Calendar,
+  Activity, Lock,
+} from 'lucide-react'
 import { useMe } from '@/lib/hooks'
 import { api } from '@/lib/auth'
 import toast from 'react-hot-toast'
-import { format } from 'date-fns'
+import { format, formatDistanceToNow } from 'date-fns'
 
 interface ApiKey {
   id: string
@@ -16,7 +20,57 @@ interface ApiKey {
   lastUsedAt: string | null
 }
 
-function CopyBtn({ text }: { text: string }) {
+// ─── Avatar ───────────────────────────────────────────────────────────────────
+function Avatar({ name, email }: { name: string; email: string }) {
+  const initials = name
+    .split(' ')
+    .map(w => w[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2)
+
+  return (
+    <div className="relative">
+      <div
+        className="w-16 h-16 rounded-2xl flex items-center justify-center text-lg font-black font-mono select-none"
+        style={{
+          background: 'linear-gradient(135deg, rgba(255,45,85,0.2) 0%, rgba(255,45,85,0.06) 100%)',
+          border: '1px solid rgba(255,45,85,0.25)',
+          boxShadow: '0 0 30px rgba(255,45,85,0.12)',
+          color: '#FF2D55',
+        }}
+      >
+        {initials}
+      </div>
+      <div
+        className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 bg-emerald-400"
+        style={{ borderColor: 'var(--bg)', boxShadow: '0 0 8px rgba(52,211,153,0.7)' }}
+      />
+    </div>
+  )
+}
+
+// ─── Plan badge ───────────────────────────────────────────────────────────────
+function PlanBadge({ plan }: { plan: string }) {
+  const isPro = plan !== 'FREE'
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold uppercase tracking-wider"
+      style={{
+        background: isPro ? 'rgba(250,204,21,0.1)' : 'rgba(255,255,255,0.05)',
+        border: isPro ? '1px solid rgba(250,204,21,0.25)' : '1px solid rgba(255,255,255,0.08)',
+        color: isPro ? '#facc15' : 'rgba(255,255,255,0.35)',
+        boxShadow: isPro ? '0 0 12px rgba(250,204,21,0.1)' : 'none',
+      }}
+    >
+      {isPro && <Zap size={9} />}
+      {plan}
+    </span>
+  )
+}
+
+// ─── Copy button ──────────────────────────────────────────────────────────────
+function CopyBtn({ text, size = 13 }: { text: string; size?: number }) {
   const [copied, setCopied] = useState(false)
   function copy() {
     navigator.clipboard.writeText(text).then(() => {
@@ -25,13 +79,149 @@ function CopyBtn({ text }: { text: string }) {
     })
   }
   return (
-    <button onClick={copy}
-      className="p-1.5 rounded text-white/30 hover:text-white/70 transition-colors">
-      {copied ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
-    </button>
+    <motion.button
+      onClick={copy}
+      whileTap={{ scale: 0.9 }}
+      className="p-1.5 rounded-lg text-theme-faint hover:text-theme-muted transition-colors"
+    >
+      <AnimatePresence mode="wait">
+        {copied
+          ? <motion.span key="c" initial={{ scale: 0 }} animate={{ scale: 1 }}><Check size={size} className="text-emerald-400" /></motion.span>
+          : <motion.span key="d" initial={{ scale: 0 }} animate={{ scale: 1 }}><Copy size={size} /></motion.span>
+        }
+      </AnimatePresence>
+    </motion.button>
   )
 }
 
+// ─── Section card ─────────────────────────────────────────────────────────────
+function Section({
+  icon: Icon,
+  title,
+  subtitle,
+  accent,
+  action,
+  children,
+  delay = 0,
+}: {
+  icon: React.ElementType
+  title: string
+  subtitle?: string
+  accent?: string
+  action?: React.ReactNode
+  children: React.ReactNode
+  delay?: number
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay, duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+      className="hud-card overflow-hidden"
+    >
+      {/* Top accent line */}
+      <div
+        className="absolute top-0 left-0 right-0 h-[1px]"
+        style={{ background: accent ?? 'linear-gradient(90deg, transparent, rgba(255,45,85,0.3) 50%, transparent)' }}
+      />
+      <div className="px-6 py-4 border-b border-theme flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center"
+            style={{ background: 'rgba(255,45,85,0.08)', border: '1px solid rgba(255,45,85,0.15)' }}
+          >
+            <Icon size={14} style={{ color: 'rgba(255,45,85,0.7)' }} />
+          </div>
+          <div>
+            <h3 className="text-theme font-semibold text-sm">{title}</h3>
+            {subtitle && <p className="text-theme-faint text-[11px] mt-0.5">{subtitle}</p>}
+          </div>
+        </div>
+        {action}
+      </div>
+      {children}
+    </motion.div>
+  )
+}
+
+// ─── Input field ──────────────────────────────────────────────────────────────
+function Field({
+  label, hint, children,
+}: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="hud-label text-[9px] block mb-2">{label}</label>
+      {children}
+      {hint && <p className="text-theme-faint text-[11px] mt-1.5">{hint}</p>}
+    </div>
+  )
+}
+
+// ─── Password input ───────────────────────────────────────────────────────────
+function PasswordInput({
+  value, onChange, placeholder, autoComplete,
+}: {
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+  autoComplete?: string
+}) {
+  const [show, setShow] = useState(false)
+  return (
+    <div className="relative">
+      <input
+        type={show ? 'text' : 'password'}
+        className="sp-input w-full pr-10"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        autoComplete={autoComplete}
+      />
+      <button
+        type="button"
+        onClick={() => setShow(v => !v)}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-theme-faint hover:text-theme-muted transition-colors"
+      >
+        {show ? <EyeOff size={13} /> : <Eye size={13} />}
+      </button>
+    </div>
+  )
+}
+
+// ─── Password strength ────────────────────────────────────────────────────────
+function PasswordStrength({ password }: { password: string }) {
+  const len = password.length
+  const hasUpper = /[A-Z]/.test(password)
+  const hasNum = /\d/.test(password)
+  const hasSpecial = /[^a-zA-Z0-9]/.test(password)
+  const score = [len >= 8, len >= 12, hasUpper, hasNum, hasSpecial].filter(Boolean).length
+
+  const label = score <= 1 ? 'Weak' : score <= 3 ? 'Fair' : score <= 4 ? 'Good' : 'Strong'
+  const color = score <= 1 ? '#FF2D55' : score <= 3 ? '#facc15' : score <= 4 ? '#60a5fa' : '#34d399'
+  const bars = 5
+
+  if (!password) return null
+
+  return (
+    <div className="mt-2 space-y-1.5">
+      <div className="flex gap-1">
+        {Array.from({ length: bars }).map((_, i) => (
+          <div
+            key={i}
+            className="h-1 flex-1 rounded-full transition-all duration-300"
+            style={{
+              background: i < score ? color : 'rgba(255,255,255,0.06)',
+              boxShadow: i < score ? `0 0 6px ${color}60` : 'none',
+            }}
+          />
+        ))}
+      </div>
+      <p className="text-[10px] font-mono" style={{ color }}>{label}</p>
+    </div>
+  )
+}
+
+// ─── API Keys section ─────────────────────────────────────────────────────────
 function ApiKeysSection() {
   const [keys, setKeys] = useState<ApiKey[]>([])
   const [loading, setLoading] = useState(true)
@@ -42,7 +232,10 @@ function ApiKeysSection() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
   useEffect(() => {
-    api.get('/auth/api-keys').then(r => setKeys(r.data.keys ?? [])).catch(() => setKeys([])).finally(() => setLoading(false))
+    api.get('/auth/api-keys')
+      .then(r => setKeys(r.data.keys ?? []))
+      .catch(() => setKeys([]))
+      .finally(() => setLoading(false))
   }, [])
 
   async function createKey() {
@@ -67,94 +260,182 @@ function ApiKeysSection() {
     try {
       await api.delete(`/auth/api-keys/${id}`)
       setKeys(prev => prev.filter(k => k.id !== id))
-      toast.success('API key deleted')
+      toast.success('Key revoked')
     } catch (e: any) {
-      toast.error(e.response?.data?.message ?? 'Failed to delete key')
+      toast.error(e.response?.data?.message ?? 'Failed to revoke key')
     } finally {
       setDeletingId(null)
     }
   }
 
   return (
-    <div className="glass rounded-2xl overflow-hidden">
-      <div className="px-6 py-5 border-b border-white/[0.05] flex items-center justify-between">
-        <div>
-          <h3 className="text-white font-semibold">API Keys</h3>
-          <p className="text-white/35 text-xs mt-0.5">Use these to authenticate with the Specter API.</p>
-        </div>
-        <motion.button onClick={() => setShowCreate(v => !v)} whileTap={{ scale: 0.97 }}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 bg-white/[0.04] text-white/60 text-xs hover:bg-white/[0.08] transition-all">
-          <Plus size={12} />
-          New Key
+    <Section
+      icon={Key}
+      title="API Keys"
+      subtitle="Authenticate with the Specter REST API"
+      delay={0.2}
+      action={
+        <motion.button
+          onClick={() => setShowCreate(v => !v)}
+          whileTap={{ scale: 0.95 }}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-mono transition-all ${
+            showCreate
+              ? 'bg-red-500/10 text-red-400 border border-red-500/25'
+              : 'border border-theme bg-theme-surface text-theme-muted hover:text-theme'
+          }`}
+        >
+          <Plus size={11} className={`transition-transform ${showCreate ? 'rotate-45' : ''}`} />
+          {showCreate ? 'Cancel' : 'New Key'}
         </motion.button>
-      </div>
-
-      {showCreate && (
-        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
-          className="px-6 py-4 border-b border-white/[0.05] bg-white/[0.02]">
-          <div className="flex gap-3">
-            <input type="text" className="sp-input flex-1 text-sm"
-              placeholder="Key name (e.g. CI/CD, Local Dev)"
-              value={newKeyName} onChange={e => setNewKeyName(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && createKey()} autoFocus />
-            <motion.button onClick={createKey} disabled={!newKeyName.trim() || creating} whileTap={{ scale: 0.97 }}
-              className="px-4 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-40 flex items-center gap-2"
-              style={{ background: 'linear-gradient(135deg, #FF2D55, #CC1A3A)' }}>
-              {creating ? <Loader2 size={14} className="animate-spin" /> : 'Create'}
-            </motion.button>
-          </div>
-        </motion.div>
-      )}
-
-      {newKeyValue && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-          className="px-6 py-4 border-b border-white/[0.05] bg-emerald-500/[0.05] border-l-2 border-l-emerald-500/50">
-          <p className="text-emerald-400 text-xs font-semibold mb-2">Copy your key now — it won&apos;t be shown again.</p>
-          <div className="flex items-center gap-2 bg-black/30 rounded-lg p-2.5">
-            <code className="text-white/80 text-xs font-mono flex-1 break-all">{newKeyValue}</code>
-            <CopyBtn text={newKeyValue} />
-          </div>
-          <button onClick={() => setNewKeyValue(null)} className="text-white/30 text-xs mt-2 hover:text-white/50 transition-colors">
-            Dismiss
-          </button>
-        </motion.div>
-      )}
-
-      <div className="divide-y divide-white/[0.04]">
-        {loading ? (
-          <div className="flex items-center justify-center py-10">
-            <Loader2 size={18} className="text-white/25 animate-spin" />
-          </div>
-        ) : keys.length === 0 ? (
-          <p className="text-white/25 text-sm text-center py-10">No API keys yet.</p>
-        ) : (
-          keys.map(key => (
-            <div key={key.id} className="flex items-center gap-4 px-6 py-4 hover:bg-white/[0.02] transition-colors">
-              <Key size={14} className="text-white/30 flex-shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-white text-sm font-medium">{key.name}</p>
-                <p className="text-white/30 text-xs font-mono">{key.prefix}••••••••••••••••</p>
-              </div>
-              <div className="text-right mr-3">
-                <p className="text-white/25 text-xs">{format(new Date(key.createdAt), 'MMM d, yyyy')}</p>
-                {key.lastUsedAt ? (
-                  <p className="text-white/15 text-xs">Used {format(new Date(key.lastUsedAt), 'MMM d')}</p>
-                ) : (
-                  <p className="text-white/15 text-xs">Never used</p>
-                )}
-              </div>
-              <motion.button onClick={() => deleteKey(key.id)} disabled={deletingId === key.id} whileTap={{ scale: 0.9 }}
-                className="p-1.5 rounded-lg text-white/20 hover:text-red-400 hover:bg-red-500/[0.08] transition-all">
-                {deletingId === key.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+      }
+    >
+      {/* Create row */}
+      <AnimatePresence>
+        {showCreate && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="px-6 py-4 border-b border-theme bg-theme-surface/50 flex gap-3">
+              <input
+                type="text"
+                autoFocus
+                className="sp-input flex-1 text-sm"
+                placeholder="Name this key (e.g. CI/CD, Local Dev)"
+                value={newKeyName}
+                onChange={e => setNewKeyName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && createKey()}
+              />
+              <motion.button
+                onClick={createKey}
+                disabled={!newKeyName.trim() || creating}
+                whileTap={{ scale: 0.96 }}
+                className="px-4 py-2 rounded-xl text-white text-sm font-semibold font-mono disabled:opacity-40 flex items-center gap-2 transition-opacity"
+                style={{
+                  background: 'linear-gradient(135deg, #FF2D55, #cc1a3a)',
+                  boxShadow: '0 0 20px rgba(255,45,85,0.25)',
+                }}
+              >
+                {creating ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                Create
               </motion.button>
             </div>
-          ))
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* New key reveal */}
+      <AnimatePresence>
+        {newKeyValue && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div
+              className="px-6 py-4 border-b border-theme"
+              style={{
+                background: 'rgba(52,211,153,0.04)',
+                borderLeft: '2px solid rgba(52,211,153,0.4)',
+              }}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle size={12} className="text-emerald-400" />
+                <p className="text-emerald-400 text-xs font-semibold font-mono">
+                  Copy now — this key won&apos;t be shown again
+                </p>
+              </div>
+              <div
+                className="flex items-center gap-2 rounded-xl px-3 py-2.5"
+                style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(52,211,153,0.15)' }}
+              >
+                <code className="text-emerald-300/80 text-[11px] font-mono flex-1 break-all">{newKeyValue}</code>
+                <CopyBtn text={newKeyValue} />
+              </div>
+              <button
+                onClick={() => setNewKeyValue(null)}
+                className="text-theme-faint text-[11px] mt-2 hover:text-theme-muted transition-colors font-mono"
+              >
+                Dismiss ↑
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Key list */}
+      <div>
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 size={16} className="text-theme-faint animate-spin" />
+          </div>
+        ) : keys.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-14 gap-3">
+            <Key size={18} className="text-theme-faint/50" />
+            <p className="text-theme-faint text-[11px] font-mono tracking-widest">NO KEYS ISSUED</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-theme">
+            {/* Table header */}
+            <div className="grid grid-cols-[1fr_auto_auto] gap-4 px-6 py-2.5 bg-theme-surface/30">
+              <span className="hud-label text-[9px]">Key</span>
+              <span className="hud-label text-[9px] text-right">Created</span>
+              <span className="hud-label text-[9px] w-8" />
+            </div>
+            {keys.map((key, i) => (
+              <motion.div
+                key={key.id}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.05 }}
+                className="grid grid-cols-[1fr_auto_auto] gap-4 items-center px-6 py-4 hover:bg-theme-surface/50 transition-colors group"
+              >
+                <div className="min-w-0">
+                  <p className="text-theme text-sm font-medium truncate">{key.name}</p>
+                  <p
+                    className="text-[11px] font-mono mt-0.5"
+                    style={{ color: 'rgba(255,255,255,0.25)' }}
+                  >
+                    {key.prefix}
+                    <span style={{ letterSpacing: '0.05em' }}>{'•'.repeat(16)}</span>
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-theme-faint text-[11px] font-mono">
+                    {format(new Date(key.createdAt), 'MMM d, yyyy')}
+                  </p>
+                  <p className="text-theme-faint/60 text-[10px] mt-0.5">
+                    {key.lastUsedAt
+                      ? `Used ${formatDistanceToNow(new Date(key.lastUsedAt), { addSuffix: true })}`
+                      : 'Never used'}
+                  </p>
+                </div>
+                <motion.button
+                  onClick={() => deleteKey(key.id)}
+                  disabled={deletingId === key.id}
+                  whileTap={{ scale: 0.88 }}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-theme-faint hover:text-red-400 transition-all opacity-0 group-hover:opacity-100"
+                  style={{ ':hover': { background: 'rgba(255,45,85,0.08)' } } as any}
+                  title="Revoke key"
+                >
+                  {deletingId === key.id
+                    ? <Loader2 size={13} className="animate-spin" />
+                    : <Trash2 size={13} />
+                  }
+                </motion.button>
+              </motion.div>
+            ))}
+          </div>
         )}
       </div>
-    </div>
+    </Section>
   )
 }
 
+// ─── Main settings page ───────────────────────────────────────────────────────
 export default function SettingsPage() {
   const { data: me, isLoading, refetch } = useMe()
   const [name, setName] = useState('')
@@ -176,7 +457,7 @@ export default function SettingsPage() {
       await refetch()
       toast.success('Profile updated')
     } catch (e: any) {
-      toast.error(e.response?.data?.message ?? 'Failed to update profile')
+      toast.error(e.response?.data?.message ?? 'Failed to update')
     } finally {
       setSavingProfile(false)
     }
@@ -200,114 +481,197 @@ export default function SettingsPage() {
 
   if (isLoading || !me) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 size={24} className="text-white/30 animate-spin" />
+      <div className="flex flex-col items-center justify-center h-64 gap-4">
+        <div className="relative">
+          <Loader2 size={24} className="text-red-400/40 animate-spin" />
+          <div className="absolute inset-0 blur-xl animate-pulse" style={{ background: 'rgba(255,45,85,0.2)' }} />
+        </div>
+        <p className="hud-label tracking-[0.3em] animate-pulse">LOADING OPERATOR DATA</p>
       </div>
     )
   }
 
-  return (
-    <div className="space-y-8 max-w-2xl">
+  const canSavePassword = currentPassword.length > 0 && newPassword.length >= 8
 
-      {/* Header */}
-      <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }}>
-        <p className="text-[11px] font-mono text-white/25 uppercase tracking-widest mb-2">Account</p>
-        <h1 className="text-4xl font-bold grad-text leading-none">Settings</h1>
+  return (
+    <div className="space-y-8 max-w-2xl relative">
+      {/* Ambient */}
+      <div
+        className="fixed top-0 right-0 w-[500px] h-[400px] pointer-events-none"
+        style={{ background: 'radial-gradient(ellipse at top right, rgba(255,45,85,0.04) 0%, transparent 60%)' }}
+      />
+
+      {/* ── Header ──────────────────────────────────────────────────── */}
+      <motion.div
+        initial={{ opacity: 0, y: -12 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex items-center justify-between"
+      >
+        <div>
+          <p className="hud-label text-[9px] mb-1.5 tracking-[0.3em]">OPERATOR</p>
+          <h1 className="text-4xl font-black font-mono leading-none text-theme">Settings</h1>
+        </div>
+        <PlanBadge plan={me.plan} />
       </motion.div>
 
-      {/* Profile */}
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-        className="glass rounded-2xl overflow-hidden">
-        <div className="px-6 py-5 border-b border-white/[0.05] flex items-center gap-3">
-          <User size={15} className="text-white/40" />
-          <h3 className="text-white font-semibold">Profile</h3>
-        </div>
-        <form onSubmit={saveProfile} className="p-6 space-y-5">
-          <div>
-            <label className="text-white/50 text-xs uppercase tracking-widest block mb-2">Display Name</label>
-            <input type="text" className="sp-input w-full"
-              value={name} onChange={e => setName(e.target.value)} maxLength={100} />
-          </div>
-          <div>
-            <label className="text-white/50 text-xs uppercase tracking-widest block mb-2">Email</label>
-            <input type="email" className="sp-input w-full opacity-50 cursor-not-allowed"
-              value={me.email} disabled />
-            <p className="text-white/20 text-xs mt-1.5">Email changes require contacting support.</p>
-          </div>
-          <div className="flex items-center justify-between pt-2">
-            <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${me.plan === 'FREE' ? 'bg-white/30' : 'bg-emerald-400'}`} />
-              <span className="text-white/40 text-xs font-mono">{me.plan} plan</span>
+      {/* ── Profile hero ─────────────────────────────────────────────── */}
+      <motion.div
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.05, duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+        className="hud-card p-6 relative overflow-hidden"
+      >
+        <div className="scan-line" />
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{ background: 'radial-gradient(ellipse at top left, rgba(255,45,85,0.04) 0%, transparent 60%)' }}
+        />
+
+        <div className="flex items-center gap-5">
+          <Avatar name={me.name} email={me.email} />
+          <div className="flex-1 min-w-0">
+            <p className="text-theme font-bold text-lg leading-tight truncate">{me.name}</p>
+            <p className="text-theme-muted text-sm font-mono mt-0.5 truncate">{me.email}</p>
+            <div className="flex items-center gap-3 mt-2">
+              <span className="text-[10px] text-theme-faint font-mono flex items-center gap-1">
+                <Calendar size={9} />
+                Member since {format(new Date(me.createdAt), 'MMM yyyy')}
+              </span>
+              <span className="text-theme-border">·</span>
+              <span className="text-[10px] text-theme-faint font-mono flex items-center gap-1">
+                <Activity size={9} />
+                {me.sitesLimit} site limit
+              </span>
             </div>
-            <motion.button type="submit" disabled={savingProfile || !name.trim()} whileTap={{ scale: 0.97 }}
-              className="px-4 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-40 flex items-center gap-2"
-              style={{ background: 'linear-gradient(135deg, #FF2D55, #CC1A3A)' }}>
-              {savingProfile ? <Loader2 size={14} className="animate-spin" /> : null}
+          </div>
+        </div>
+      </motion.div>
+
+      {/* ── Profile form ──────────────────────────────────────────────── */}
+      <Section icon={User} title="Profile" subtitle="Update your display name" delay={0.1}>
+        <form onSubmit={saveProfile} className="p-6 space-y-5">
+          <Field label="Display Name">
+            <input
+              type="text"
+              className="sp-input w-full"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              maxLength={100}
+            />
+          </Field>
+          <Field
+            label="Email Address"
+            hint="Email changes require contacting support."
+          >
+            <input
+              type="email"
+              className="sp-input w-full opacity-40 cursor-not-allowed select-none"
+              value={me.email}
+              disabled
+            />
+          </Field>
+          <div className="flex items-center justify-end pt-1">
+            <motion.button
+              type="submit"
+              disabled={savingProfile || !name.trim() || name === me.name}
+              whileTap={{ scale: 0.97 }}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-semibold font-mono disabled:opacity-35 transition-all"
+              style={{
+                background: 'linear-gradient(135deg, #FF2D55, #cc1a3a)',
+                boxShadow: '0 0 20px rgba(255,45,85,0.2)',
+              }}
+            >
+              {savingProfile ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
               Save Changes
             </motion.button>
           </div>
         </form>
-      </motion.div>
+      </Section>
 
-      {/* Security */}
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
-        className="glass rounded-2xl overflow-hidden">
-        <div className="px-6 py-5 border-b border-white/[0.05] flex items-center gap-3">
-          <Shield size={15} className="text-white/40" />
-          <h3 className="text-white font-semibold">Security</h3>
-        </div>
-        <form onSubmit={savePassword} className="p-6 space-y-4">
-          <div>
-            <label className="text-white/50 text-xs uppercase tracking-widest block mb-2">Current Password</label>
-            <input type="password" className="sp-input w-full"
-              value={currentPassword} onChange={e => setCurrentPassword(e.target.value)}
-              placeholder="••••••••" autoComplete="current-password" />
-          </div>
-          <div>
-            <label className="text-white/50 text-xs uppercase tracking-widest block mb-2">New Password</label>
-            <input type="password" className="sp-input w-full"
-              value={newPassword} onChange={e => setNewPassword(e.target.value)}
-              placeholder="Min 8 characters" autoComplete="new-password" />
-          </div>
-          <div className="flex justify-end pt-1">
-            <motion.button type="submit"
-              disabled={savingPassword || !currentPassword || newPassword.length < 8}
+      {/* ── Security ──────────────────────────────────────────────────── */}
+      <Section icon={Shield} title="Security" subtitle="Change your password" delay={0.15}>
+        <form onSubmit={savePassword} className="p-6 space-y-5">
+          <Field label="Current Password">
+            <PasswordInput
+              value={currentPassword}
+              onChange={setCurrentPassword}
+              placeholder="Enter current password"
+              autoComplete="current-password"
+            />
+          </Field>
+          <Field label="New Password">
+            <PasswordInput
+              value={newPassword}
+              onChange={setNewPassword}
+              placeholder="Min 8 characters"
+              autoComplete="new-password"
+            />
+            <PasswordStrength password={newPassword} />
+          </Field>
+          <div className="flex items-center justify-end pt-1">
+            <motion.button
+              type="submit"
+              disabled={savingPassword || !canSavePassword}
               whileTap={{ scale: 0.97 }}
-              className="px-4 py-2 rounded-xl border border-white/10 bg-white/[0.04] text-white/70 text-sm hover:bg-white/[0.09] transition-all disabled:opacity-40 flex items-center gap-2">
-              {savingPassword ? <Loader2 size={14} className="animate-spin" /> : null}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold font-mono border transition-all disabled:opacity-35"
+              style={{
+                background: canSavePassword ? 'rgba(255,45,85,0.08)' : 'transparent',
+                borderColor: canSavePassword ? 'rgba(255,45,85,0.3)' : 'rgba(255,255,255,0.08)',
+                color: canSavePassword ? 'rgba(255,45,85,0.9)' : 'rgba(255,255,255,0.3)',
+              }}
+            >
+              {savingPassword ? <Loader2 size={13} className="animate-spin" /> : <Lock size={13} />}
               Change Password
             </motion.button>
           </div>
         </form>
-      </motion.div>
+      </Section>
 
-      {/* API Keys */}
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-        <ApiKeysSection />
-      </motion.div>
+      {/* ── API Keys ──────────────────────────────────────────────────── */}
+      <ApiKeysSection />
 
-      {/* Account info */}
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
-        className="glass rounded-2xl p-6 space-y-3">
-        <h3 className="text-white font-semibold text-sm">Account Details</h3>
-        <div className="space-y-2.5">
+      {/* ── Account details ───────────────────────────────────────────── */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.25, duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+        className="hud-card overflow-hidden"
+      >
+        <div className="px-6 py-4 border-b border-theme">
+          <h3 className="text-theme font-semibold text-sm">Account Details</h3>
+        </div>
+        <div className="divide-y divide-theme">
           {[
-            { label: 'User ID', value: me.id, mono: true },
-            { label: 'Member Since', value: format(new Date(me.createdAt), 'MMMM d, yyyy') },
-            { label: 'Plan', value: me.plan },
-            { label: 'Sites Limit', value: String(me.sitesLimit) },
-            { label: 'Subscription', value: me.subscriptionStatus },
-          ].map(row => (
-            <div key={row.label} className="flex items-center justify-between">
-              <span className="text-white/35 text-xs">{row.label}</span>
-              <span className={`text-white/65 text-xs ${row.mono ? 'font-mono bg-white/5 px-1.5 py-0.5 rounded text-[10px]' : ''}`}>
-                {row.value}
-              </span>
-            </div>
+            { label: 'User ID',      value: me.id,                                           mono: true  },
+            { label: 'Member Since', value: format(new Date(me.createdAt), 'MMMM d, yyyy'),  mono: false },
+            { label: 'Plan',         value: me.plan,                                          badge: true },
+            { label: 'Sites Limit',  value: String(me.sitesLimit),                            mono: false },
+            { label: 'Subscription', value: me.subscriptionStatus,                            mono: false },
+          ].map((row, i) => (
+            <motion.div
+              key={row.label}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.25 + i * 0.04 }}
+              className="flex items-center justify-between px-6 py-3.5 hover:bg-theme-surface/40 transition-colors"
+            >
+              <span className="text-theme-faint text-[11px] font-mono uppercase tracking-widest">{row.label}</span>
+              {row.badge ? (
+                <PlanBadge plan={row.value} />
+              ) : row.mono ? (
+                <div className="flex items-center gap-1.5">
+                  <code className="text-theme-secondary text-[10px] font-mono bg-theme-surface px-2 py-1 rounded border border-theme truncate max-w-[160px]">
+                    {row.value}
+                  </code>
+                  <CopyBtn text={row.value} size={11} />
+                </div>
+              ) : (
+                <span className="text-theme-secondary text-xs font-mono">{row.value}</span>
+              )}
+            </motion.div>
           ))}
         </div>
       </motion.div>
-
     </div>
   )
 }

@@ -23,7 +23,7 @@ export function NeonButton({
 
   const variants = {
     primary: 'neon-btn-primary text-white',
-    ghost: 'neon-btn-ghost text-white/70 hover:text-white',
+    ghost: 'neon-btn-ghost text-theme-secondary hover:text-theme',
     danger: 'neon-btn-danger text-red-300',
   }
 
